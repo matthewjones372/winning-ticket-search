@@ -103,5 +103,5 @@ We recommend that you use Python 3.9 - versions from 3.6 should work but this ha
 $ pip3 install lottery-0.1.0-py3-none-any.whl
 ```
 
-#### Devloping
+#### Developing
 This has been built using [Poetry](https://python-poetry.org/) if you want to run the tests and create build it's recommended that you install and use it. 
