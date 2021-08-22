@@ -3,7 +3,6 @@ import torch.nn as nn
 
 
 class DenseNetworkQAT(nn.Module):
-
     def __init__(self, num_classes=10):
         super(DenseNetworkQAT, self).__init__()
         self.classifier = nn.Sequential(
@@ -13,7 +12,7 @@ class DenseNetworkQAT(nn.Module):
             nn.Linear(300, 100),
             nn.ReLU(),
             nn.Linear(100, num_classes),
-            torch.quantization.DeQuantStub()
+            torch.quantization.DeQuantStub(),
         )
 
     def forward(self, x):

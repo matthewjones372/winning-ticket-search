@@ -12,15 +12,17 @@ from lottery.training.OptimiserType import OptimiserType
 
 
 class ClassificationTrainer(ModelTrainer):
-    def __init__(self,
-                 loss_func,
-                 train_loader: torch.utils.data.DataLoader,
-                 test_loader: torch.utils.data.DataLoader,
-                 device: torch.device,
-                 logging: bool = True,
-                 with_scheduler: bool = False,
-                 optimiser_type: OptimiserType = OptimiserType.SGD,
-                 is_quantised_model: bool = False):
+    def __init__(
+        self,
+        loss_func,
+        train_loader: torch.utils.data.DataLoader,
+        test_loader: torch.utils.data.DataLoader,
+        device: torch.device,
+        logging: bool = True,
+        with_scheduler: bool = False,
+        optimiser_type: OptimiserType = OptimiserType.SGD,
+        is_quantised_model: bool = False,
+    ):
         self.loss_func = loss_func
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -30,13 +32,19 @@ class ClassificationTrainer(ModelTrainer):
         self.optimiser_type = optimiser_type
         self.is_quantised_model = is_quantised_model
 
-    def train_and_test(self, _model: nn.Module, training_iterations: int) -> TrainTestResult:
+    def train_and_test(
+        self, _model: nn.Module, training_iterations: int
+    ) -> TrainTestResult:
         optimiser = self.__load_optimiser(_model)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, T_max=training_iterations)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimiser, T_max=training_iterations
+        )
         results: List[EpochResult] = []
 
         training_message = "################ Train/Test Iteration ########"
-        for _ in tqdm.tqdm(range(training_iterations), desc=training_message, position=2, leave=True):
+        for _ in tqdm.tqdm(
+            range(training_iterations), desc=training_message, position=2, leave=True
+        ):
             train_result = self.train(_model, optimiser)
             test_result = self.test(_model)
 
@@ -45,10 +53,12 @@ class ClassificationTrainer(ModelTrainer):
 
             if self.logging:
                 print()
-                print(f"-> Training Accuracy: {train_result.accuracy:.3f}\n"
-                      f"-> Training Loss: {train_result.loss:.3f}\n"
-                      f"-> Test Accuracy: {test_result.accuracy:.3f}\n"
-                      f"-> Test Loss: {test_result.loss:.3f}\n")
+                print(
+                    f"-> Training Accuracy: {train_result.accuracy:.3f}\n"
+                    f"-> Training Loss: {train_result.loss:.3f}\n"
+                    f"-> Test Accuracy: {test_result.accuracy:.3f}\n"
+                    f"-> Test Loss: {test_result.loss:.3f}\n"
+                )
 
                 results.append(EpochResult(train_result, test_result))
 
@@ -80,7 +90,9 @@ class ClassificationTrainer(ModelTrainer):
             with torch.no_grad():
                 metrics = EpochMetrics(device=torch.device("cpu"))
                 for (data, target) in self.test_loader:
-                    images, labels = data.to(torch.device("cpu")), target.to(torch.device("cpu"))
+                    images, labels = data.to(torch.device("cpu")), target.to(
+                        torch.device("cpu")
+                    )
                     outputs = model_int8(images)
                     metrics.update_batch(outputs, labels)
                 return metrics.compute()
@@ -100,15 +112,17 @@ class ClassificationTrainer(ModelTrainer):
             return torch.optim.Adam(_model.parameters(), weight_decay=1e-4)
 
         elif self.optimiser_type == OptimiserType.SGD:
-            return torch.optim.SGD(_model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
+            return torch.optim.SGD(
+                _model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4
+            )
 
         else:
             return torch.optim.Adam(_model.parameters())
 
     def __zero_out_gradients(self, _model: nn.Module):
         epsilon = 1e-6
-        zero_scaler = torch.tensor(0.).to(self.device)
+        zero_scaler = torch.tensor(0.0).to(self.device)
 
         for name, p in _model.named_parameters():
-            if 'weight' in name:
+            if "weight" in name:
                 p.grad.data = torch.where(p.data < epsilon, zero_scaler, p.grad.data)

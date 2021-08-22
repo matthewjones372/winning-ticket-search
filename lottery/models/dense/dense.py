@@ -3,7 +3,6 @@ import torch.nn as nn
 
 
 class DenseNetwork(nn.Module):
-
     def __init__(self, num_classes=10):
         super(DenseNetwork, self).__init__()
         self.classifier = nn.Sequential(

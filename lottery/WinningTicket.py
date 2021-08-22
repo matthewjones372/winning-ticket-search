@@ -19,17 +19,18 @@ from lottery.training.ModelTrainer import ModelTrainer
 
 
 class WinningTicket:
-    def __init__(self,
-                 model: nn.Module,
-                 model_trainer: ModelTrainer,
-                 device: torch.device,
-                 pruning_strategy: Strategy = GlobalPercentilePruningStrategy(),
-                 checkpoint: bool = True,
-                 checkpoint_freq: int = 5,
-                 base_name: str = "",
-                 models_path: str = os.path.join(os.getcwd(), "Results"),
-                 with_logging: bool = True
-                 ):
+    def __init__(
+        self,
+        model: nn.Module,
+        model_trainer: ModelTrainer,
+        device: torch.device,
+        pruning_strategy: Strategy = GlobalPercentilePruningStrategy(),
+        checkpoint: bool = True,
+        checkpoint_freq: int = 5,
+        base_name: str = "",
+        models_path: str = os.path.join(os.getcwd(), "Results"),
+        with_logging: bool = True,
+    ):
         self.model = model.to(device)
         self.model_trainer = model_trainer
         self.initial_state_dict = deepcopy(model.state_dict())
@@ -52,15 +53,17 @@ class WinningTicket:
 
         if with_logging:
             print(f"Writing weight metrics to {weights_file_path}")
-            self.weight_logger = DataLogger(["epoch", "layer_name", "non_zero_weights"],
-                                            weights_file_path,
-                                            self.base_path)
+            self.weight_logger = DataLogger(
+                ["epoch", "layer_name", "non_zero_weights"],
+                weights_file_path,
+                self.base_path,
+            )
 
             metrics_file_path = f"{base_name}_metrics_{current_date}.csv"
             print(f"Writing test metrics to {metrics_file_path}")
-            self.metrics_logger = DataLogger(["epoch", "accuracy", "loss"],
-                                             metrics_file_path,
-                                             self.base_path)
+            self.metrics_logger = DataLogger(
+                ["epoch", "accuracy", "loss"], metrics_file_path, self.base_path
+            )
 
     def non_zero_weights(self):
         self.model.eval()
@@ -74,10 +77,9 @@ class WinningTicket:
 
         return non_zero
 
-    def update_non_zero_weights(self,
-                                epoch: int,
-                                _model: nn.Module,
-                                logging: bool = True):
+    def update_non_zero_weights(
+        self, epoch: int, _model: nn.Module, logging: bool = True
+    ):
 
         _model.eval()
         weight_layer: List[(int, str, float)] = []
@@ -103,39 +105,46 @@ class WinningTicket:
 
         return weight_layer
 
-    def search_by_target_sparsity(self,
-                                  training_iterations: int = 30,
-                                  target_sparsity: int = 5,
-                                  percentage_prune: int = 5):
-        prune_iterations = ceil(-np.log(target_sparsity / 100.0) / percentage_prune * 100)
+    def search_by_target_sparsity(
+        self,
+        training_iterations: int = 30,
+        target_sparsity: int = 5,
+        percentage_prune: int = 5,
+    ):
+        prune_iterations = ceil(
+            -np.log(target_sparsity / 100.0) / percentage_prune * 100
+        )
         return self.search(prune_iterations, training_iterations, percentage_prune)
 
-    def search(self,
-               prune_iterations: int = 30,
-               training_iterations: int = 30,
-               percentage_prune: int = 10):
+    def search(
+        self,
+        prune_iterations: int = 30,
+        training_iterations: int = 30,
+        percentage_prune: int = 10,
+    ):
 
         model = self.model
         mask = self.mask
         loop_message = "###### pruning Iteration #######"
-        for prune_iteration in tqdm.tqdm(range(prune_iterations + 1), desc=loop_message, position=0, leave=True):
+        for prune_iteration in tqdm.tqdm(
+            range(prune_iterations + 1), desc=loop_message, position=0, leave=True
+        ):
             if prune_iteration == 0:
                 mask, model = self.__set_models_to_original_init(model, mask)
             else:
-                mask, model = self.pruning_strategy.prune(model,
-                                                          mask,
-                                                          percentage_prune,
-                                                          prune_iteration,
-                                                          device=self.device)
+                mask, model = self.pruning_strategy.prune(
+                    model, mask, percentage_prune, prune_iteration, device=self.device
+                )
 
                 i = 0
-                # model = model.apply(self.__initialise_weight)
+                model = model.apply(self.__initialise_weight)
 
-                model = self.__set_models_to_original_init(model, mask)
                 for name, layer in model.named_parameters():
                     if self.__is_weight(name):
                         update_layer_data = layer.data.cpu().numpy() * mask[i]
-                        layer.data = torch.from_numpy(update_layer_data).to(layer.device)
+                        layer.data = torch.from_numpy(update_layer_data).to(
+                            layer.device
+                        )
                         i += 1
 
             result = self.model_trainer.train_and_test(model, training_iterations)
@@ -154,7 +163,9 @@ class WinningTicket:
 
         return self
 
-    def __update_metrics_log(self, epoch: int, epoch_results: List[EpochResult]) -> None:
+    def __update_metrics_log(
+        self, epoch: int, epoch_results: List[EpochResult]
+    ) -> None:
         def as_row(result: EpochResult):
             metrics = asdict(result.test_result)
             metrics["epoch"] = epoch
@@ -247,13 +258,15 @@ class WinningTicket:
 
     @staticmethod
     def __is_weight(parameter_name: str):
-        return 'weight' in parameter_name
+        return "weight" in parameter_name
 
     @staticmethod
     def __is_bias(parameter_name: str):
-        return 'bias' in parameter_name
+        return "bias" in parameter_name
 
-    def __save_state(self, model: nn.Module, checkpoint_num: Optional[int] = None) -> None:
+    def __save_state(
+        self, model: nn.Module, checkpoint_num: Optional[int] = None
+    ) -> None:
         state_save_dir = os.path.join(self.base_path, self.base_name)
 
         if not os.path.isdir(state_save_dir):
