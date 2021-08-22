@@ -67,7 +67,7 @@ winning_ticket = WinningTicket(
     model_trainer=model_trainer,
     device=device,
     # base name is the filename/directory where metrics will be output if logging is switch on
-    base_name="logging.csv"
+    base_name="ALEXNET_CIFAR10"
 )
 
 # search for a winning ticket
@@ -90,8 +90,8 @@ TODO
 
 ### Installation
 
-It is recommended that you install Pytorch and Pytorch Vision first with your set-up in mind. I.e. if you want to use a
-CPU version or a CUDA build. Set-up instructions for PyTorch and PyTorch Vision can be
+It is recommended that you install Pytorch and Pytorch Vision first with your set-up in mind. I.e., if you want to use a
+CPU version, or a CUDA build. Set-up instructions for PyTorch and PyTorch Vision can be
 found [here](https://pytorch.org/). If you want to use the quantised models opt for version >= 1.9 as this is still a beta feature and a bit un-stable.
 
 Currently, this implementation of winning ticket search is not in a public repo:
@@ -100,7 +100,7 @@ Please download the latest release and install using [pip](https://pypi.org/proj
 We recommend that use Python version 3.9, versions from 3.8 have been tested. 
 
 ```shell
-$ pip3 install lottery-0.1.0-py3-none-any.whl
+$ pip3 install lottery-1.0.0-py3-none-any.whl
 ```
 
 #### Developing

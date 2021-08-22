@@ -55,14 +55,10 @@ if __name__ == "__main__":
         model_trainer=model_trainer,
         device=device,
         # base name is the filename/directory where metrics will be output if logging is switch on
-        base_name="logging.csv",
+        base_name="ALEXNET_CIFAR10",
     )
 
     # search for a winning ticket
     winning_ticket.search(
         prune_iterations=40, training_iterations=15, percentage_prune=5
-    )
-    # or
-    winning_ticket.search_by_target_sparsity(
-        target_sparsity=10, training_iterations=15, percentage_prune=5
     )
