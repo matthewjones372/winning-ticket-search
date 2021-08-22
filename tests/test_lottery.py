@@ -1,4 +1,3 @@
-import lottery.training.ModelTrainer
 from lottery import __version__
 
 

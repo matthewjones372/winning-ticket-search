@@ -41,7 +41,7 @@ if __name__ == "__main__":
     # Select the device for training
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # define a model trainer with your loss function
+    # define a model trainer with your desired loss function
     model_trainer = ClassificationTrainer(
         loss_func=nn.CrossEntropyLoss(),
         train_loader=train_loader,

@@ -22,7 +22,7 @@ def test_smoke():
         optimiser_type=OptimiserType.SGD,
         train_loader=data_loader,
         test_loader=data_loader,
-        logging=False,
+        enable_logging=False,
         device=device,
     )
 
@@ -30,7 +30,6 @@ def test_smoke():
         model,
         model_trainer=trainer,
         device=device,
-        with_logging=False,
         checkpoint=False,
     )
     initial_weights = winning_ticket.non_zero_weights()

@@ -13,27 +13,27 @@ from lottery.training.OptimiserType import OptimiserType
 
 class ClassificationTrainer(ModelTrainer):
     def __init__(
-        self,
-        loss_func,
-        train_loader: torch.utils.data.DataLoader,
-        test_loader: torch.utils.data.DataLoader,
-        device: torch.device,
-        logging: bool = True,
-        with_scheduler: bool = False,
-        optimiser_type: OptimiserType = OptimiserType.SGD,
-        is_quantised_model: bool = False,
+            self,
+            loss_func,
+            train_loader: torch.utils.data.DataLoader,
+            test_loader: torch.utils.data.DataLoader,
+            device: torch.device,
+            enable_logging: bool = True,
+            with_scheduler: bool = False,
+            optimiser_type: OptimiserType = OptimiserType.SGD,
+            is_quantised_model: bool = False,
     ):
         self.loss_func = loss_func
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.device = device
-        self.logging = logging
+        self.logging = enable_logging
         self.with_scheduler = with_scheduler
         self.optimiser_type = optimiser_type
         self.is_quantised_model = is_quantised_model
 
     def train_and_test(
-        self, _model: nn.Module, training_iterations: int
+            self, _model: nn.Module, training_iterations: int
     ) -> TrainTestResult:
         optimiser = self.__load_optimiser(_model)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -42,9 +42,8 @@ class ClassificationTrainer(ModelTrainer):
         results: List[EpochResult] = []
 
         training_message = "################ Train/Test Iteration ########"
-        for _ in tqdm.tqdm(
-            range(training_iterations), desc=training_message, position=2, leave=True
-        ):
+        training_loop = tqdm.tqdm(range(training_iterations), desc=training_message, position=2, leave=True)
+        for _ in training_loop:
             train_result = self.train(_model, optimiser)
             test_result = self.test(_model)
 
