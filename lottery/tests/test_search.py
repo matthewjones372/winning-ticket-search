@@ -1,25 +1,11 @@
-import unittest
-
 import torch
 import torch.nn as nn
-from torch.utils.data.dataset import T_co
 
+from lottery.utils.testing.dataset import TestDataset
 from lottery.training.ClassificationTrainer import ClassificationTrainer
 from lottery.training.OptimiserType import OptimiserType
-from lottery.wt.winingticket import WinningTicket
-from torch.utils.data import Dataset, DataLoader
-
-
-class TestDataset(Dataset):
-    def __init__(self, shape: tuple, size: int):
-        self.shape = shape
-        self.size = size
-
-    def __len__(self):
-        return self.size
-
-    def __getitem__(self, index) -> T_co:
-        return torch.randn(self.shape, requires_grad=True), torch.tensor([1])
+from lottery.WinningTicket import WinningTicket
+from torch.utils.data import DataLoader
 
 
 def test_smoke():
@@ -44,7 +30,8 @@ def test_smoke():
         model,
         model_trainer=trainer,
         device=device,
-        with_logging=False
+        with_logging=False,
+        checkpoint=False
     )
     initial_weights = winning_ticket.non_zero_weights()
 

@@ -129,9 +129,8 @@ class WinningTicket:
                                                           device=self.device)
 
                 i = 0
-                # model = model.apply(self.__initialise_weight)
+                model = model.apply(self.__initialise_weight)
 
-                model = self.__set_models_to_original_init(model, mask)
                 for name, layer in model.named_parameters():
                     if self.__is_weight(name):
                         update_layer_data = layer.data.cpu().numpy() * mask[i]
