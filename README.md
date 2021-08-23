@@ -101,7 +101,7 @@ Please download the latest release and install using [pip](https://pypi.org/proj
 
 We recommend that use Python version 3.9, versions from 3.8 have been tested.
 
-
+#### 1. Optional if you don't have pytorch already installed
 (This step is not ideal, working on trying to get poetry to not override the installed Pytorch version)
 ```shell
 $ python3 -m pip install torch torchvision
@@ -111,12 +111,13 @@ or cuda
 $ python3 -m pip install torch+1.9.0+cu111  torchvision1.9.0+cu111 
 ```
 
+#### 2. Install TorchMetrics
 and then 
 ```shell
 $ python3 -m pip install torchmetrics
 ```
 
-then
+#### 3. Install Winning Ticket Search
 
 ```shell
 $ python3 -m pip install lottery-1.0.0-py3-none-any.whl
