@@ -10,7 +10,7 @@ Networks paper.
 
 #### Searching for a winning ticket
 
-##### Example of finding a winning ticket for CIFAR-10 using AlexNet
+##### Example of finding a winning ticket for AlexNet
 
 ```python
 import torch
