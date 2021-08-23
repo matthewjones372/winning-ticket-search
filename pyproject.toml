@@ -18,6 +18,13 @@ pytest = "^6.2.4"
 pylint = "^2.10.2"
 black = "^21.7b0"
 coverage = {extras = ["toml"], version = "^5.5"}
+poethepoet = "^0.10.0"
+
+
+[tool.poe.tasks]
+force-cuda11 = "python -m pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html torchmetrics"
+force-cuda11 = "python -m pip install torch==1.9.0+cu102 torchvision==0.10.0+cu102 -f https://download.pytorch.org/whl/torch_stable.html torchmetrics"
+force-cpu = "python -m pip install torch torchvision -f https://download.pytorch.org/whl/torch_stable.html torchmetrics"
 
 
 [build-system]
