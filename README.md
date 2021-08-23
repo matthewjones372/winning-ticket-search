@@ -91,18 +91,18 @@ TODO
 
 # Installation
 
-It is recommended that you install Pytorch and Pytorch Vision first with your set-up in mind. I.e., if you want to use a
-CPU version, or a CUDA build. Set-up instructions for PyTorch and PyTorch Vision can be
-found [here](https://pytorch.org/). If you want to use the quantised models opt for version >= 1.9 as this is still a
-beta feature and a bit un-stable.
+It is recommended that you install Pytorch and Pytorch Vision first with your set-up in mind. If you want to use a
+CPU build, or a CUDA build. Set-up instructions for PyTorch and PyTorch Vision can be
+found [here](https://pytorch.org/). If you want to use the quantised models, opt for version >= 1.9 as this is still a
+beta feature and can be a bit un-stable.
 
-Currently, this implementation of winning ticket search is not in a public repo:
+Currently, the implementation of winning ticket search is not in a public repo:
 Please download the latest release and install using [pip](https://pypi.org/project/pip/).
 
 We recommend that use Python version 3.9, versions from 3.8 have been tested.
 
 #### 1. Install Pytorch and Pytorch Vision (Optional if not already installed)
-(This step is not ideal, working on trying to get poetry to not override the installed Pytorch version)
+(This step is not ideal, working on trying to get Poetry to not override the installed Pytorch version)
 ```shell
 $ python3 -m pip install torch torchvision
 ```
@@ -126,7 +126,7 @@ $ python3 -m pip install torchmetrics
 
 #### 3. Install Winning Ticket Search
 
-Finall you can install winning ticket search...
+Finally you can install winning ticket search...
 
 ```shell
 $ python3 -m pip install lottery-1.0.0-py3-none-any.whl
@@ -134,5 +134,5 @@ $ python3 -m pip install lottery-1.0.0-py3-none-any.whl
 
 # Developing
 
-This has been built using [Poetry](https://python-poetry.org/) if you want to run the tests and create build it's
-recommended that you install and use it. 
+This has been built using [Poetry](https://python-poetry.org/) if you want to run the tests and create a build it's
+recommended that you install it on your local machine. 
