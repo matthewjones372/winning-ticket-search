@@ -106,18 +106,26 @@ We recommend that use Python version 3.9, versions from 3.8 have been tested.
 ```shell
 $ python3 -m pip install torch torchvision
 ```
-or cuda
+or if you wish to use CUDA
+
+For CUDA 10
 ```shell
-$ python3 -m pip install torch+1.9.0+cu111  torchvision1.9.0+cu111 
+$ python3 -m pip install torch==1.9.0+cu102 torchvision==0.10.0+cu102 -f https://download.pytorch.org/whl/torch_stable.html
+```
+
+For CUDA 11
+```shell
+$ python3 -m pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html
 ```
 
 #### 2. Install TorchMetrics
-and then 
 ```shell
 $ python3 -m pip install torchmetrics
 ```
 
 #### 3. Install Winning Ticket Search
+
+Finall you can install winning ticket search...
 
 ```shell
 $ python3 -m pip install lottery-1.0.0-py3-none-any.whl
