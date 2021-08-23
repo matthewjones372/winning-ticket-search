@@ -101,7 +101,7 @@ Please download the latest release and install using [pip](https://pypi.org/proj
 
 We recommend that use Python version 3.9, versions from 3.8 have been tested.
 
-#### 1. Install Pytorch and Pytorch Vision (Optional if not already installed)
+#### 1. Install Pytorch and Pytorch Vision (Optional if already installed)
 (This step is not ideal, working on trying to get Poetry to not override the installed Pytorch version)
 ```shell
 $ python3 -m pip install torch torchvision
