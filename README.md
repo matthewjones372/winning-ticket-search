@@ -6,7 +6,7 @@ Implementation of the Winning Ticket Search algorithm for my Masters in Machine 
 by [Frankle](https://arxiv.org/abs/1803.03635) in the The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural
 Networks paper.
 
-### Usage
+# Usage
 
 #### Searching for a winning ticket
 
@@ -89,7 +89,7 @@ winning_ticket.search_by_target_sparsity(
 
 TODO
 
-### Installation
+# Installation
 
 It is recommended that you install Pytorch and Pytorch Vision first with your set-up in mind. I.e., if you want to use a
 CPU version, or a CUDA build. Set-up instructions for PyTorch and PyTorch Vision can be
@@ -105,7 +105,7 @@ We recommend that use Python version 3.9, versions from 3.8 have been tested.
 $ pip3 install lottery-1.0.0-py3-none-any.whl
 ```
 
-#### Developing
+# Developing
 
 This has been built using [Poetry](https://python-poetry.org/) if you want to run the tests and create build it's
 recommended that you install and use it. 
