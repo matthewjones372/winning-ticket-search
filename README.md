@@ -101,19 +101,20 @@ Please download the latest release and install using [pip](https://pypi.org/proj
 
 We recommend that use Python version 3.9, versions from 3.8 have been tested.
 
-#### 1. (Optional) Install Pytorch and PytorchVision
+#### 1. (Optional if not already installed) Install Pytorch and Pytorch Vision
 (This step is not ideal, working on trying to get poetry to not override the installed Pytorch version)
 ```shell
 $ python3 -m pip install torch torchvision
 ```
-or if you wish to use CUDA
 
-For CUDA 10
+##### If you wish to use CUDA
+
+##### For CUDA 10
 ```shell
 $ python3 -m pip install torch==1.9.0+cu102 torchvision==0.10.0+cu102 -f https://download.pytorch.org/whl/torch_stable.html
 ```
 
-For CUDA 11
+##### For CUDA 11
 ```shell
 $ python3 -m pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html
 ```
@@ -130,8 +131,6 @@ Finall you can install winning ticket search...
 ```shell
 $ python3 -m pip install lottery-1.0.0-py3-none-any.whl
 ```
-
-Hopefully in the future it will jsut be the last command....
 
 # Developing
 
