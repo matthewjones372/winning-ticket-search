@@ -29,6 +29,6 @@ jobs:
         run: poetry install
 
       - name: install pytorch
-        run: poe force-cpu
+        run: poetry run poe force-cpu
       - name: run tests
         run: poetry run pytest
