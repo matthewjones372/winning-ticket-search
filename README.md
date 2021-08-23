@@ -111,6 +111,7 @@ or cuda
 $ python3 -m pip install torch+1.9.0+cu111  torchvision1.9.0+cu111 
 ```
 
+and then 
 ```shell
 $ python3 -m pip install torchmetrics
 ```
