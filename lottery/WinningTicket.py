@@ -282,3 +282,6 @@ class WinningTicket:
 
     def __call__(self, data):
         return self.model(data)
+
+    def __repr__(self):
+        return f"{self.model} Winning-Ticket Search"
