@@ -1,4 +1,5 @@
 import datetime
+import datetime
 import os
 from copy import deepcopy
 from dataclasses import asdict
@@ -11,6 +12,8 @@ import torch.nn as nn
 import torch.nn.init as init
 import tqdm
 
+from lottery.checkpointing.formats import CheckpointFormats
+from lottery.checkpointing.resolver import CheckpointFormatResolver
 from lottery.metrics.DataLogger import DataLogger
 from lottery.metrics.ResultTypes import EpochResult
 from lottery.pruning.LayerPercentile import GlobalPercentilePruningStrategy
@@ -30,9 +33,10 @@ class WinningTicket:
             pruning_strategy: Strategy = GlobalPercentilePruningStrategy(),
             checkpoint: bool = True,
             checkpoint_freq: int = 5,
+            checkpoint_format: CheckpointFormats = CheckpointFormats.Script,
             base_name: str = "",
             models_path: str = os.path.join(os.getcwd(), "Results"),
-            enable_logging: bool = True,
+            enable_logging: bool = True
     ):
         self.model = model.to(device)
         self.model_trainer = model_trainer
@@ -41,17 +45,17 @@ class WinningTicket:
         self.mask = self.initial_mask
         self.device = device
         self.checkpoint = checkpoint
+        self.checkpoint_save_format = CheckpointFormatResolver(checkpoint_format).resolve()
         self.checkpoint_frequency = checkpoint_freq
         self.base_name = base_name
         self.base_path = os.path.join(models_path, base_name)
         self.pruning_strategy = pruning_strategy
-        self.with_logging = enable_logging
+        self.enable_logging = enable_logging
 
-        if not os.path.exists(self.base_path):
+        if not os.path.exists(self.base_path) and (enable_logging or checkpoint):
             os.makedirs(self.base_path)
 
         current_date = str(datetime.datetime.now().strftime("%Y_%m_%d"))
-
         weights_file_path = f"{base_name}_weights_{current_date}.csv"
 
         if enable_logging:
@@ -152,13 +156,13 @@ class WinningTicket:
             result = self.model_trainer.train_and_test(model, training_iterations)
             epoch_results, model = result.results, result.model
 
-            if self.with_logging:
+            if self.enable_logging:
                 self.__update_metrics_log(prune_iteration, epoch_results)
                 weight_layer = self.update_non_zero_weights(prune_iteration, model)
                 self.weight_logger.write_rows(weight_layer)
 
             if self.checkpoint and prune_iteration % self.checkpoint_frequency == 0:
-                self.__save_state(model, prune_iteration)
+                self.save_state(model, prune_iteration)
 
         self.model = model
         self.mask = mask
@@ -266,7 +270,7 @@ class WinningTicket:
     def __is_bias(parameter_name: str):
         return "bias" in parameter_name
 
-    def __save_state(
+    def save_state(
             self, model: nn.Module, checkpoint_num: Optional[int] = None
     ) -> None:
         state_save_dir = os.path.join(self.base_path, self.base_name)
@@ -276,9 +280,7 @@ class WinningTicket:
 
         model_name = f"{self.base_name}_{checkpoint_num}.pt"
         model_path = os.path.join(state_save_dir, model_name)
-
-        print(f"Saving state to {model_path}")
-        torch.save(model.state_dict(), model_path)
+        self.checkpoint_save_format.save(model, model_path)
 
     def __call__(self, data):
         return self.model(data)

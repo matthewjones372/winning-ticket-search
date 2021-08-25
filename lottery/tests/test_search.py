@@ -1,11 +1,14 @@
+import os
+
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 
-from lottery.utils.testing.dataset import TestDataset
+from lottery.WinningTicket import WinningTicket
+from lottery.checkpointing.quantised import Quantised
 from lottery.training.ClassificationTrainer import ClassificationTrainer
 from lottery.training.OptimiserType import OptimiserType
-from lottery.WinningTicket import WinningTicket
-from torch.utils.data import DataLoader
+from lottery.utils.testing.dataset import TestDataset
 
 
 def test_smoke():
@@ -31,6 +34,7 @@ def test_smoke():
         model_trainer=trainer,
         device=device,
         checkpoint=False,
+        enable_logging=False
     )
     initial_weights = winning_ticket.non_zero_weights()
 
@@ -41,3 +45,12 @@ def test_smoke():
     final_weights = winning_ticket.non_zero_weights()
 
     assert final_weights < initial_weights
+
+
+def test_can_save_and_load_qat_model():
+    qat_model = nn.Sequential(torch.quantization.QuantStub(), nn.Linear(5, 1), torch.quantization.DeQuantStub())
+    file_path = os.path.join(os.getcwd(), "temp.pt")
+    Quantised.save(qat_model, file_path)
+    loaded_model = Quantised.load(file_path, torch.device("cpu"))
+    os.remove(file_path)
+    assert loaded_model
