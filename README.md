@@ -1,4 +1,4 @@
-# 🎟️ Winning Ticket Search for Pytorch
+# 🎟️ Winning Ticket Search
 
 ### Info
 
