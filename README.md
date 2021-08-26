@@ -121,6 +121,10 @@ class DenseNetworkQAT(nn.Module):
 
 model = DenseNetworkQAT(num_classes=10)
 
+# or simply wrap your non QAT model with the Quant wrapper which will insert the layers for you
+normal_model = DenseNetwork(num_classes=10)
+model = torch.quantization.QuantWrapper(normal_model)
+
 forward_transform = transforms.Compose([
     transforms.Resize((28, 28)),
     transforms.ToTensor(),
