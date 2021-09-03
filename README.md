@@ -1,5 +1,7 @@
 # 🎟️ Winning Ticket Search
 
+[![Run tests](https://github.com/matthewjones372/winning-ticket-search/actions/workflows/run_test.yml/badge.svg)](https://github.com/matthewjones372/winning-ticket-search/actions/workflows/run_test.yml)
+
 ### Info
 
 Implementation of the Winning Ticket Search algorithm for my Masters in Machine Learning. As described
