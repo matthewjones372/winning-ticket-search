@@ -3,7 +3,6 @@ import torchvision.transforms as transforms
 from torchvision import datasets
 
 import warnings
-
 warnings.filterwarnings("ignore", category=UserWarning)
 
 transforms = transforms.Compose(
