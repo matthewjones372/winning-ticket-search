@@ -184,7 +184,7 @@ beta feature and can be a bit un-stable.
 Currently, the implementation of winning ticket search is not in a public repo:
 Please download the latest release and install using [pip](https://pypi.org/project/pip/).
 
-We recommend that use Python version 3.9, versions from 3.8 have been tested.
+We recommend that you use Python version 3.9, only versions from 3.8 to 3.9 have been tested.
 
 #### 1. Install Pytorch and Pytorch Vision (Optional if already installed)
 (This step is not ideal, working on trying to get Poetry to not override the installed Pytorch version)
