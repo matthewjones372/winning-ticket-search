@@ -178,7 +178,7 @@ winning_ticket.search(
 
 It is recommended that you install Pytorch and Pytorch Vision first with your set-up in mind. If you want to use a
 CPU build, or a CUDA build. Set-up instructions for PyTorch and PyTorch Vision can be
-found [here](https://pytorch.org/). If you want to use the quantised models, opt for version >= 1.9 as this is still a
+found [here](https://pytorch.org/). If you want to use the quantised models, opt for version == 1.9 as this is still a
 beta feature and can be a bit un-stable.
 
 Currently, the implementation of winning ticket search is not in a public repo:
