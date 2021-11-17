@@ -17,7 +17,7 @@ torchvision = "^0.11.1"
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
 pylint = "^2.11.1"
-black = "^21.9b0"
+black = "^21.11b0"
 coverage = {extras = ["toml"], version = "^6.0"}
 poethepoet = "^0.10.0"
 
