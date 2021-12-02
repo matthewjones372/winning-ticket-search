@@ -1,6 +1,7 @@
 # 🎟️ Winning Ticket Search
 
 [![Run tests](https://github.com/matthewjones372/winning-ticket-search/actions/workflows/run_test.yml/badge.svg)](https://github.com/matthewjones372/winning-ticket-search/actions/workflows/run_test.yml)
+[![CodeFactor](https://www.codefactor.io/repository/github/matthewjones372/winning-ticket-search/badge/main)](https://www.codefactor.io/repository/github/matthewjones372/winning-ticket-search/overview/main)
 
 ### Info
 
