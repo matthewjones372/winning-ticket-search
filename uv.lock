@@ -250,7 +250,7 @@ wheels = [
 
 [[package]]
 name = "lottery"
-version = "2.2.0"
+version = "2.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
