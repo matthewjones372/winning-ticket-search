@@ -29,10 +29,14 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    train_loader, test_loader = mnist(limit=args.limit, fake=args.fake_data)
+    train_loader, val_loader, test_loader = mnist(limit=args.limit, fake=args.fake_data)
     # The default int8 config runs on CPU; pass base_config= for GPU int4/fp8 schemes.
     trainer = ClassificationTrainer(
-        nn.CrossEntropyLoss(), train_loader, test_loader, optimiser=adam(lr=1.2e-3)
+        nn.CrossEntropyLoss(),
+        train_loader,
+        test_loader,
+        optimiser=adam(lr=1.2e-3),
+        val_loader=val_loader,
     )
     ticket = QatWinningTicket(
         LeNet300100(), trainer, callbacks=[ProgressBar(), CsvLogger(args.output)]

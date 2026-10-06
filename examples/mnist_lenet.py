@@ -34,11 +34,12 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    train_loader, test_loader = mnist(limit=args.limit, fake=args.fake_data)
+    train_loader, val_loader, test_loader = mnist(limit=args.limit, fake=args.fake_data)
     trainer = ClassificationTrainer(
         loss_fn=nn.CrossEntropyLoss(),
         train_loader=train_loader,
         test_loader=test_loader,
+        val_loader=val_loader,
         device=device(),
         optimiser=adam(lr=1.2e-3),  # the paper's setting for LeNet
     )

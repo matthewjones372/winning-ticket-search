@@ -79,3 +79,59 @@ def test_progress_bar_closes_and_restores_logging(capsys):
     assert bar._bar is None
     assert logging.getLogger().handlers == root_handlers
     assert "3/3" in capsys.readouterr().err
+
+
+class EpochRecorder(Callback):
+    def __init__(self) -> None:
+        self.events: list[tuple[str, int, int]] = []
+
+    def on_round_start(self, ticket, round_, epochs):
+        self.events.append(("round", round_, epochs))
+
+    def on_epoch_end(self, ticket, round_, result):
+        self.events.append(("epoch", round_, result.epoch))
+
+
+def test_round_start_and_epoch_end_hooks():
+    recorder = EpochRecorder()
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(), callbacks=[recorder])
+    ticket.search(rounds=1, epochs=2)
+    assert recorder.events == [
+        ("round", 0, 2),
+        ("epoch", 0, 0),
+        ("epoch", 0, 1),
+        ("round", 1, 2),
+        ("epoch", 1, 0),
+        ("epoch", 1, 1),
+    ]
+
+
+def test_trainers_without_on_epoch_still_work():
+    class OldTrainer(ShiftTrainer):
+        def fit(self, model, epochs, on_step=None):
+            return super().fit(model, epochs, on_step)
+
+    recorder = EpochRecorder()
+    ticket = WinningTicket(TinyNet(), OldTrainer(), callbacks=[recorder, ProgressBar()])
+    ticket.search(rounds=1, epochs=2)
+    assert recorder.events == [("round", 0, 2), ("round", 1, 2)]
+
+
+def test_log_line_includes_validation_accuracy(caplog):
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(val_accuracy=0.75))
+    with caplog.at_level(logging.INFO, logger="lottery"):
+        ticket.search(rounds=0, epochs=1)
+    assert (
+        caplog.records[-1].getMessage()
+        == "round 0  density 100.00%  val acc 0.7500  test acc 0.5000"
+    )
+
+
+def test_progress_bar_shows_epochs_and_cleans_up(capsys):
+    bar = ProgressBar()
+    WinningTicket(TinyNet(), ShiftTrainer(), callbacks=[bar]).search(rounds=1, epochs=3)
+    err = capsys.readouterr().err
+    assert "epoch:   0%|          | 0/3" in err, "an epoch bar sized to the round"
+    assert "2/2" in err, "the round bar completes"
+    assert bar._bar is None
+    assert bar._epochs is None

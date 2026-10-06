@@ -26,6 +26,7 @@ trainer = ClassificationTrainer(
     loss_fn=nn.CrossEntropyLoss(),
     train_loader=train_loader,
     test_loader=test_loader,
+    val_loader=val_loader,  # optional: picks the ticket without peeking at the test set
     device=device,
 )
 
@@ -38,13 +39,15 @@ result = ticket.search(rounds=10, epochs=5, prune_fraction=0.2)
 # or keep going until at most 5% of the weights remain
 result = ticket.search_to_density(0.05, epochs=5)
 
-best = result.best()  # sparsest round within 0.5 points of the dense accuracy
+best = result.best()  # sparsest round within 0.5 points of the dense validation accuracy
 print(best.round, best.density, best.final_test)
 result.best(tolerance=0.01)  # or score rounds your own way with metric=...
 ```
 
-`best()` picks by the trainer's `test_loader`. If you report on that same data, give the
-trainer a validation loader instead and evaluate the chosen ticket on held-out data.
+With a `val_loader`, every epoch records validation metrics too, and `best()` chooses by
+validation accuracy, so the chosen round's test accuracy is an honest estimate. Without
+one it falls back to test accuracy, which flatters the result. The examples hold out the
+last twelfth of the training set, as Frankle & Carbin do for MNIST.
 
 ```python
 ```
@@ -118,8 +121,9 @@ from lottery import CsvLogger, ProgressBar
 ticket = WinningTicket(model, trainer, callbacks=[ProgressBar(), CsvLogger("results/run")])
 ```
 
-`ProgressBar` routes log lines above the bar while it is open. `CsvLogger` writes
-`metrics.csv` (per epoch), `layers.csv` (per-layer sparsity) and `extra.csv` (extra
+`ProgressBar` shows a bar over rounds with one over the current round's epochs, and
+routes log lines above them while open. `CsvLogger` writes `metrics.csv` (per epoch,
+including validation metrics when there are any), `layers.csv` (per-layer sparsity) and `extra.csv` (extra
 per-round evaluations such as the int8 accuracy). For anything else, such as TensorBoard
 or an experiment tracker, subclass `Callback`:
 
@@ -128,11 +132,18 @@ from lottery import Callback
 
 
 class MyTracker(Callback):
+    def on_round_start(self, ticket, round_, epochs): ...
+
+    def on_epoch_end(self, ticket, round_, result): ...  # result is an EpochResult
+
     def on_round_end(self, ticket, result): ...  # result is a RoundResult
 
     def on_search_end(self, ticket):  # also called if a round raises
         ...
 ```
+
+`on_epoch_end` needs a trainer whose `fit` accepts an `on_epoch` callback, as
+`ClassificationTrainer` does. With a custom trainer that doesn't, the other hooks still run.
 
 ### Checkpoints
 

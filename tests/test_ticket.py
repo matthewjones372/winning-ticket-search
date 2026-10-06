@@ -375,3 +375,38 @@ def test_masks_and_rewind_state_tell_pruning_masks_from_other_buffers():
 def test_masks_of_a_bare_layer():
     ticket = WinningTicket(nn.Linear(4, 4), ShiftTrainer())
     assert set(ticket.masks()) == {"weight_mask"}
+
+
+def _val_round(index: int, density: float, val: float, test: float) -> RoundResult:
+    epoch = EpochResult(0, Metrics(0.0, test), Metrics(0.0, test), Metrics(0.0, val))
+    return RoundResult(round=index, density=density, epochs=[epoch], layers=[])
+
+
+def test_best_selects_on_validation_when_there_is_one():
+    rounds = [
+        _val_round(0, 1.0, val=0.90, test=0.90),
+        _val_round(1, 0.8, val=0.90, test=0.80),
+        _val_round(2, 0.64, val=0.70, test=0.95),
+    ]
+    assert rounds[1].final_val == Metrics(0.0, 0.90)
+    assert SearchResult(rounds).best().round == 1, "round 2 only looks good on test"
+
+
+def test_val_metrics_survive_a_checkpoint(tmp_path):
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(val_accuracy=0.75))
+    ticket.search(rounds=1, epochs=1)
+    path = ticket.save(tmp_path / "t.pt")
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(val_accuracy=0.75))
+    resumed.load(path)
+    assert resumed.history == ticket.history
+
+
+def test_csv_has_validation_columns(tmp_path):
+    ticket = WinningTicket(
+        TinyNet(), ShiftTrainer(val_accuracy=0.75), callbacks=[CsvLogger(tmp_path)]
+    )
+    ticket.search(rounds=0, epochs=1)
+    with (tmp_path / "metrics.csv").open() as fh:
+        row = next(csv.DictReader(fh))
+    assert row["val_accuracy"] == "0.75"
+    assert row["val_loss"] == "0.0"

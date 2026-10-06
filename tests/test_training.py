@@ -119,3 +119,25 @@ def test_frozen_parameters_are_not_optimised(classification_data):
     loader = DataLoader(TensorDataset(torch.randn(8, 8), torch.zeros(8, dtype=torch.long)))
     ClassificationTrainer(nn.CrossEntropyLoss(), loader, loader).fit(model, epochs=1)
     assert torch.equal(model[0].bias, before)
+
+
+def test_val_loader_is_evaluated_every_epoch(tiny_net, classification_data):
+    trainer = ClassificationTrainer(
+        nn.CrossEntropyLoss(),
+        classification_data,
+        classification_data,
+        val_loader=classification_data,
+    )
+    results = trainer.fit(tiny_net, epochs=2)
+    assert all(r.val is not None for r in results)
+    assert results[-1].val == results[-1].test, "same data, same numbers"
+
+
+def test_no_val_loader_means_no_val_metrics(tiny_net, trainer):
+    assert trainer.fit(tiny_net, epochs=1)[0].val is None
+
+
+def test_on_epoch_called_with_each_result(tiny_net, trainer):
+    seen = []
+    results = trainer.fit(tiny_net, epochs=3, on_epoch=seen.append)
+    assert seen == results

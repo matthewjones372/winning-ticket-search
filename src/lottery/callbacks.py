@@ -19,6 +19,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 if TYPE_CHECKING:
     from lottery.ticket import RoundResult, WinningTicket
+    from lottery.training import EpochResult
 
 
 class Callback:
@@ -31,6 +32,13 @@ class Callback:
     def on_search_start(self, ticket: WinningTicket, rounds: int | None) -> None:
         """``rounds`` is how many rounds this call expects to run, or ``None`` if unknown."""
 
+    def on_round_start(self, ticket: WinningTicket, round_: int, epochs: int) -> None:
+        pass
+
+    def on_epoch_end(self, ticket: WinningTicket, round_: int, result: EpochResult) -> None:
+        """Only called if the trainer's ``fit`` accepts ``on_epoch`` (``ClassificationTrainer``
+        does)."""
+
     def on_round_end(self, ticket: WinningTicket, result: RoundResult) -> None:
         pass
 
@@ -39,22 +47,37 @@ class Callback:
 
 
 class ProgressBar(Callback):
-    """A tqdm bar over pruning rounds.
+    """A tqdm bar over pruning rounds, with one over the current round's epochs below it.
 
     While it is open, records sent to the root logger's handlers are written through
-    tqdm so they appear above the bar instead of breaking it.
+    tqdm so they appear above the bars instead of breaking them. The epoch bar only moves
+    if the trainer reports epochs (see :meth:`Callback.on_epoch_end`).
     """
 
-    def __init__(self, desc: str = "pruning round") -> None:
+    def __init__(self, desc: str = "pruning round", epochs: bool = True) -> None:
         self.desc = desc
+        self.show_epochs = epochs
         self._bar: tqdm[Any] | None = None
+        self._epochs: tqdm[Any] | None = None
         self._stack = ExitStack()
 
     def on_search_start(self, ticket: WinningTicket, rounds: int | None) -> None:
         self._stack.enter_context(logging_redirect_tqdm())
         self._bar = self._stack.enter_context(tqdm(total=rounds, desc=self.desc))
 
+    def on_round_start(self, ticket: WinningTicket, round_: int, epochs: int) -> None:
+        if self.show_epochs:
+            self._close_epochs()
+            self._epochs = tqdm(total=epochs, desc="epoch", leave=False, position=1)
+
+    def on_epoch_end(self, ticket: WinningTicket, round_: int, result: EpochResult) -> None:
+        if self._epochs is not None:
+            metrics = result.val or result.test
+            self._epochs.set_postfix(acc=f"{metrics.accuracy:.4f}")
+            self._epochs.update()
+
     def on_round_end(self, ticket: WinningTicket, result: RoundResult) -> None:
+        self._close_epochs()
         assert self._bar is not None
         postfix = {"density": f"{result.density:.3f}"}
         if result.final_test is not None:
@@ -63,8 +86,14 @@ class ProgressBar(Callback):
         self._bar.update()
 
     def on_search_end(self, ticket: WinningTicket) -> None:
+        self._close_epochs()
         self._stack.close()
         self._bar = None
+
+    def _close_epochs(self) -> None:
+        if self._epochs is not None:
+            self._epochs.close()
+            self._epochs = None
 
 
 METRICS_FIELDS = [
@@ -73,6 +102,8 @@ METRICS_FIELDS = [
     "epoch",
     "train_loss",
     "train_accuracy",
+    "val_loss",
+    "val_accuracy",
     "test_loss",
     "test_accuracy",
 ]
@@ -126,6 +157,8 @@ class CsvLogger(Callback):
                     "epoch": e.epoch,
                     "train_loss": e.train.loss,
                     "train_accuracy": e.train.accuracy,
+                    "val_loss": None if e.val is None else e.val.loss,
+                    "val_accuracy": None if e.val is None else e.val.accuracy,
                     "test_loss": e.test.loss,
                     "test_accuracy": e.test.accuracy,
                 }
