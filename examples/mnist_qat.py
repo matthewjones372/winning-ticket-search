@@ -12,7 +12,7 @@ import logging
 from _data import mnist
 from torch import nn
 
-from lottery import ClassificationTrainer, adam
+from lottery import ClassificationTrainer, CsvLogger, ProgressBar, adam
 from lottery.models import LeNet300100
 from lottery.qat import QatWinningTicket
 
@@ -31,15 +31,11 @@ def main() -> None:
     trainer = ClassificationTrainer(
         nn.CrossEntropyLoss(), train_loader, test_loader, optimiser=adam(lr=1.2e-3)
     )
-    ticket = QatWinningTicket(LeNet300100(), trainer, output_dir=args.output)
-    result = ticket.search(rounds=args.rounds, epochs=args.epochs)
-
-    for r in result.rounds:
-        q = r.extra_metrics["quantised"]
-        print(
-            f"round {r.round:2d}  density {r.density:6.2%}  "
-            f"fake-quant acc {r.final_test.accuracy:.4f}  int8 acc {q.accuracy:.4f}"
-        )
+    ticket = QatWinningTicket(
+        LeNet300100(), trainer, callbacks=[ProgressBar(), CsvLogger(args.output)]
+    )
+    # Each round's log line carries the fake-quantised and the real int8 accuracy.
+    ticket.search(rounds=args.rounds, epochs=args.epochs)
 
 
 if __name__ == "__main__":

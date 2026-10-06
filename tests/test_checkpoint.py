@@ -3,13 +3,13 @@ import csv
 import pytest
 import torch
 
-from lottery import WinningTicket, load_checkpoint, save_checkpoint
+from lottery import CsvLogger, WinningTicket, load_checkpoint, save_checkpoint
 
 from .conftest import ShiftTrainer, TinyNet
 
 
 def test_round_trip_restores_weights_masks_and_rewind_state(tmp_path):
-    ticket = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    ticket = WinningTicket(TinyNet(), ShiftTrainer())
     ticket.search(rounds=2, epochs=1)
     path = ticket.save(tmp_path / "nested" / "ticket.pt")
 
@@ -38,11 +38,11 @@ def test_unknown_format_version_rejected(tmp_path):
 
 
 def test_ticket_resumes_from_checkpoint(tmp_path):
-    original = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    original = WinningTicket(TinyNet(), ShiftTrainer())
     original.search(rounds=2, epochs=1)
     path = original.save(tmp_path / "t.pt")
 
-    resumed = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    resumed = WinningTicket(TinyNet(), ShiftTrainer())
     resumed.load(path)
     assert resumed.rounds_completed == 3
     assert resumed.density() == pytest.approx(original.density())
@@ -55,12 +55,12 @@ def test_ticket_resumes_from_checkpoint(tmp_path):
 
 
 def test_resume_keeps_earlier_csv_rows(tmp_path):
-    original = WinningTicket(TinyNet(), ShiftTrainer(), output_dir=tmp_path, progress=False)
+    original = WinningTicket(TinyNet(), ShiftTrainer(), callbacks=[CsvLogger(tmp_path)])
     original.search(rounds=2, epochs=1)
     path = original.save(tmp_path / "t.pt")
     original.search(rounds=1, epochs=1)  # round 3, not in the checkpoint
 
-    resumed = WinningTicket(TinyNet(), ShiftTrainer(), output_dir=tmp_path, progress=False)
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(), callbacks=[CsvLogger(tmp_path)])
     resumed.load(path)
     resumed.search(rounds=2, epochs=1)
 
@@ -70,23 +70,23 @@ def test_resume_keeps_earlier_csv_rows(tmp_path):
 
 
 def test_loading_without_rewind_state_into_weights_ticket_is_rejected(tmp_path):
-    source = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random", progress=False)
+    source = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random")
     source.search(rounds=1, epochs=1)
     path = source.save(tmp_path / "t.pt")
 
     with pytest.raises(ValueError, match="no rewind state"):
-        WinningTicket(TinyNet(), ShiftTrainer(), progress=False).load(path)
+        WinningTicket(TinyNet(), ShiftTrainer()).load(path)
 
-    resumed = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random", progress=False)
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random")
     resumed.load(path)
     resumed.search(rounds=1, epochs=1)
     assert resumed.rounds_completed == 3
 
 
 def test_late_rewind_checkpoint_before_capture_can_be_loaded(tmp_path):
-    source = WinningTicket(TinyNet(), ShiftTrainer(), rewind_step=2, progress=False)
+    source = WinningTicket(TinyNet(), ShiftTrainer(), rewind_step=2)
     path = source.save(tmp_path / "t.pt")
-    resumed = WinningTicket(TinyNet(), ShiftTrainer(), rewind_step=2, progress=False)
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(), rewind_step=2)
     resumed.load(path, map_location="cpu")
     resumed.search(rounds=1, epochs=1)
     assert resumed.rewind_state() is not None

@@ -9,7 +9,14 @@ import logging
 from _data import device, mnist
 from torch import nn
 
-from lottery import ClassificationTrainer, LayerwiseMagnitudePruning, WinningTicket, adam
+from lottery import (
+    ClassificationTrainer,
+    CsvLogger,
+    LayerwiseMagnitudePruning,
+    ProgressBar,
+    WinningTicket,
+    adam,
+)
 from lottery.models import LeNet300100
 
 
@@ -38,14 +45,12 @@ def main() -> None:
         # The paper prunes the output layer at half the rate of the hidden layers.
         strategy=LayerwiseMagnitudePruning(output_layer_scale=0.5),
         rewind=args.rewind,
-        output_dir=args.output,
+        callbacks=[ProgressBar(), CsvLogger(args.output)],
     )
     result = ticket.search(
         rounds=args.rounds, epochs=args.epochs, prune_fraction=args.prune_fraction
     )
 
-    for r in result.rounds:
-        print(f"round {r.round:2d}  density {r.density:6.2%}  test acc {r.final_test.accuracy:.4f}")
     best = result.best()
     print(f"winning ticket: round {best.round}, {best.density:.2%} of weights")
 

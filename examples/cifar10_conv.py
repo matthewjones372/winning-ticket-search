@@ -14,7 +14,14 @@ import torch
 from _data import cifar10, device
 from torch import nn
 
-from lottery import ClassificationTrainer, WinningTicket, cosine_annealing, sgd
+from lottery import (
+    ClassificationTrainer,
+    CsvLogger,
+    ProgressBar,
+    WinningTicket,
+    cosine_annealing,
+    sgd,
+)
 from lottery.models import Conv4
 
 
@@ -43,8 +50,9 @@ def main() -> None:
         Conv4(),
         trainer,
         rewind_step=args.rewind_step,
-        output_dir=args.output,
+        checkpoint_dir=f"{args.output}/checkpoints",
         checkpoint_every=5,
+        callbacks=[ProgressBar(), CsvLogger(args.output)],
     )
     result = ticket.search(rounds=args.rounds, epochs=args.epochs, prune_fraction=0.2)
     best = result.best()

@@ -12,6 +12,7 @@ It supports:
 - rewinding to the original init, late rewinding to step *k* ([Frankle et al. 2020](https://arxiv.org/abs/1912.05671)), random re-init as a control, or no rewind (learning-rate rewinding, [Renda et al. 2020](https://arxiv.org/abs/2003.02389))
 - quantisation-aware training through [torchao](https://github.com/pytorch/ao), with the real int8 model evaluated every round
 - per-round CSV metrics, per-layer sparsity, and resumable `state_dict` checkpoints
+- a silent library: standard `logging`, plus opt-in callbacks for progress bars and CSV files
 
 ## Quick start
 
@@ -28,7 +29,7 @@ trainer = ClassificationTrainer(
     device=device,
 )
 
-ticket = WinningTicket(LeNet300100(), trainer, output_dir="results/lenet")
+ticket = WinningTicket(LeNet300100(), trainer)
 
 # Round 0 trains the dense network, then each round prunes 20% of the surviving
 # weights, rewinds the survivors to their initial values and retrains.
@@ -78,10 +79,50 @@ Any base config torchao's `QATConfig` accepts can be passed as `base_config=`, f
 example `Int4WeightOnlyConfig` for GPU inference. Symmetric weight schemes (the default)
 keep pruned weights exactly zero after conversion; asymmetric ones may not.
 
+### Logging, progress and metrics
+
+The search prints nothing on its own. It logs one `INFO` line per round to the
+`lottery.ticket` logger and one `DEBUG` line per epoch to `lottery.training`, so you
+see them once your application configures logging:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+# round 3  density 51.20%  test acc 0.9712  quantised 0.9650
+```
+
+Progress bars and files are callbacks:
+
+```python
+from lottery import CsvLogger, ProgressBar
+
+ticket = WinningTicket(
+    model, trainer, callbacks=[ProgressBar(), CsvLogger("results/run")]
+)
+```
+
+`ProgressBar` routes log lines above the bar while it is open. `CsvLogger` writes
+`metrics.csv` (per epoch), `layers.csv` (per-layer sparsity) and `extra.csv` (extra
+per-round evaluations such as the int8 accuracy). For anything else, such as TensorBoard
+or an experiment tracker, subclass `Callback`:
+
+```python
+from lottery import Callback
+
+
+class MyTracker(Callback):
+    def on_round_end(self, ticket, result):
+        ...  # result is a RoundResult
+
+    def on_search_end(self, ticket):  # also called if a round raises
+        ...
+```
+
 ### Checkpoints
 
 ```python
-ticket = WinningTicket(model, trainer, output_dir="results/run", checkpoint_every=5)
+ticket = WinningTicket(model, trainer, checkpoint_dir="results/run/checkpoints", checkpoint_every=5)
 ticket.save("ticket.pt")
 
 resumed = WinningTicket(Model(), trainer)
@@ -90,8 +131,8 @@ resumed.search(rounds=5, epochs=5)  # carries on pruning
 ```
 
 Checkpoints are plain `state_dict`s plus the round history, and load with
-`torch.load(weights_only=True)`. Resuming into the same `output_dir` keeps the CSV rows
-for the rounds already in the checkpoint.
+`torch.load(weights_only=True)`. A `CsvLogger` pointed at the directory of a resumed
+run keeps the rows for the rounds already in the checkpoint and drops any after it.
 
 ## Examples
 
@@ -135,6 +176,7 @@ uv run mypy src
 - `ClassificationTrainer(loss_func=..., optimiser_type=OptimiserType.SGD)` is now `ClassificationTrainer(loss_fn=..., optimiser=sgd())`.
 - `WinningQatTicket` is now `lottery.qat.QatWinningTicket`, built on torchao instead of `torch.quantization`. Models no longer need `QuantStub` and `DeQuantStub`.
 - TorchScript checkpoints are replaced by `state_dict` checkpoints.
+- `enable_logging=True` and `base_name` are replaced by `callbacks=[CsvLogger(dir)]`, and nothing is printed unless you configure `logging` or add `ProgressBar()`.
 
 1.x had several correctness bugs that this release fixes:
 
