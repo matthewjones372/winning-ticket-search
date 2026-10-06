@@ -1,41 +1,108 @@
-[tool.poetry]
+[project]
 name = "lottery"
-version = "1.0.0"
-description = "An Implementation of LTH search"
-authors = ["Matthew Jones <matthewjones372@gmail.com>"]
-license = "MIT"
+version = "2.0.0"
+description = "Iterative magnitude pruning search for lottery tickets (Frankle & Carbin, 2019) in PyTorch"
 readme = "README.md"
-
-keywords = ["pruning", "lth", "lottery"]
-
-[tool.poetry.dependencies]
-python = "^3.8"
-pandas = "^1.3.4"
-tqdm = "^4.62.3"
-torchvision = "^0.11.1"
-
-[tool.poetry.dev-dependencies]
-pytest = "^6.2.5"
-pylint = "^2.12.1"
-black = "^21.11b1"
-coverage = {extras = ["toml"], version = "^6.2"}
-poethepoet = "^0.11.0"
-
-
-[tool.poe.tasks]
-force-cuda11 = "python3 -m pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html torchmetrics"
-force-cuda10 = "python3 -m pip install torch==1.9.0+cu102 torchvision==0.10.0+cu102 -f https://download.pytorch.org/whl/torch_stable.html torchmetrics"
-force-cpu = "python3 -m pip install torch torchvision torchmetrics"
-
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
-
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Matthew Jones", email = "matthewjones372@gmail.com" }]
+keywords = ["pruning", "lottery-ticket-hypothesis", "sparsity", "pytorch"]
 classifiers = [
-    "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.9",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+# Quantisation-aware training via torchao.
+qat = ["torchao>=0.18"]
+# Dataset loaders used by the examples.
+vision = ["torchvision>=0.24"]
+# Pick at most one PyTorch build. `uv sync --extra cpu` or `uv sync --extra cu130`.
+cpu = ["torch>=2.9", "torchvision>=0.24"]
+cu130 = ["torch>=2.9", "torchvision>=0.24"]
+
+[project.urls]
+Repository = "https://github.com/matthewjones372/winning-ticket-search"
+Paper = "https://arxiv.org/abs/1803.03635"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.13",
+    "mypy>=1.18",
+]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.12"]
+build-backend = "uv_build"
+
+# ---------------------------------------------------------------- uv
+
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "cu130" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform != 'darwin'" },
+    { index = "pytorch-cu130", extra = "cu130" },
+]
+torchvision = [
+    { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform != 'darwin'" },
+    { index = "pytorch-cu130", extra = "cu130" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+# ---------------------------------------------------------------- tooling
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PT", "N"]
+ignore = ["N812"] # `import torch.nn.functional as F` is idiomatic
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "--import-mode=importlib"]
+filterwarnings = [
+    "ignore::DeprecationWarning:torchao.*",
+    "ignore::SyntaxWarning",
+]
+
+[tool.coverage.run]
+source = ["lottery"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 90
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = false
+ignore_missing_imports = true
