@@ -14,22 +14,21 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Unpack
 
 import torch
 from torch import nn
 
 from lottery.pruning import detach_masked_weights, masked_parameters, remove_masks
-from lottery.ticket import WinningTicket
-from lottery.training import Metrics, Trainer
+from lottery.ticket import TicketOptions, WinningTicket
 
 try:
-    from torchao.quantization import (
-        Int8DynamicActivationIntxWeightConfig,
-        PerAxis,
-        quantize_,
-    )
-    from torchao.quantization.qat import QATConfig
+    from torchao.quantization import Int8DynamicActivationIntxWeightConfig, PerAxis
+    from torchao.quantization.qat import QATConfig, QATStep
+
+    # Imported from where it is defined: `torchao.quantization` also has a `quantize_`
+    # subpackage, which type checkers resolve instead of the re-exported function.
+    from torchao.quantization.quant_api import quantize_
 except ImportError as exc:  # pragma: no cover - exercised only without the extra
     raise ImportError(
         "lottery.qat needs torchao. Install the extra with `uv add 'lottery[qat]'`."
@@ -37,6 +36,8 @@ except ImportError as exc:  # pragma: no cover - exercised only without the extr
 
 if TYPE_CHECKING:
     from torchao.core.config import AOBaseConfig
+
+    from lottery.training import Metrics, Trainer
 
 type ModuleFilter = Callable[[nn.Module, str], bool]
 
@@ -58,8 +59,7 @@ def prepare_qat(
     filter_fn: ModuleFilter | None = None,
 ) -> nn.Module:
     """Insert fake quantisation into ``model`` in place (linear layers by default)."""
-    kwargs: dict[str, Any] = {} if filter_fn is None else {"filter_fn": filter_fn}
-    quantize_(model, QATConfig(base_config or default_qat_config(), step="prepare"), **kwargs)
+    _quantize(model, QATStep.PREPARE, base_config, filter_fn)
     return model
 
 
@@ -72,9 +72,21 @@ def convert_qat(
     detach_masked_weights(masked_parameters(model))
     converted = copy.deepcopy(model)
     remove_masks(masked_parameters(converted))
-    kwargs: dict[str, Any] = {} if filter_fn is None else {"filter_fn": filter_fn}
-    quantize_(converted, QATConfig(base_config or default_qat_config(), step="convert"), **kwargs)
+    _quantize(converted, QATStep.CONVERT, base_config, filter_fn)
     return converted.eval()
+
+
+def _quantize(
+    model: nn.Module,
+    step: QATStep,
+    base_config: AOBaseConfig | None,
+    filter_fn: ModuleFilter | None,
+) -> None:
+    config = QATConfig(base_config or default_qat_config(), step=step)
+    if filter_fn is None:
+        quantize_(model, config)  # torchao's default filter: linear layers
+    else:
+        quantize_(model, config, filter_fn=filter_fn)
 
 
 class QatWinningTicket(WinningTicket):
@@ -96,14 +108,14 @@ class QatWinningTicket(WinningTicket):
         filter_fn: ModuleFilter | None = None,
         evaluate_quantised: bool = True,
         quantised_device: torch.device | str = "cpu",
-        **kwargs: Any,
+        **options: Unpack[TicketOptions],
     ) -> None:
         self.base_config = base_config or default_qat_config()
         self.quantised_device = torch.device(quantised_device)
         self.filter_fn = filter_fn
         self.evaluate_quantised = evaluate_quantised
         prepare_qat(model, self.base_config, filter_fn)
-        super().__init__(model, trainer, **kwargs)
+        super().__init__(model, trainer, **options)
 
     def quantised_model(self) -> nn.Module:
         return convert_qat(self.model, self.base_config, self.filter_fn)

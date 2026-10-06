@@ -1,5 +1,6 @@
 """Shared dataset helpers for the examples (needs the `vision` extra)."""
 
+from collections.abc import Sized
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +46,9 @@ def _loaders(
     held out for validation. ``held_out`` is the training set again, but with the test
     transforms, so validation images are not augmented.
     """
-    size = len(train)  # type: ignore[arg-type]
+    if not isinstance(train, Sized):
+        raise TypeError("the training set must have a length")
+    size = len(train)
     n_val = size // 12
     train_idx, val_idx, test_idx = range(size - n_val), range(size - n_val, size), None
     if limit is not None:

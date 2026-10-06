@@ -39,7 +39,8 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "ruff>=0.13",
-    "mypy>=1.18",
+    "ty==0.0.84",
+    "types-tqdm>=4.70.0.20260906",
 ]
 # Which PyTorch build uv installs, for working in this repo. These are groups, not extras,
 # so they stay out of the published metadata: `pip install lottery` takes whatever torch
@@ -85,8 +86,13 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PT", "N"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PT", "N", "ANN", "TC"]
 ignore = ["N812"] # `import torch.nn.functional as F` is idiomatic
+
+[tool.ruff.lint.per-file-ignores]
+# Tests are type-checked by ty from what they call; annotating every test and fixture
+# would add noise without catching anything.
+"tests/**" = ["ANN"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -106,8 +112,16 @@ skip_covered = false
 fail_under = 90
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
 
-[tool.mypy]
-python_version = "3.12"
-strict = true
-warn_unused_ignores = false
-ignore_missing_imports = true
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+include = ["src", "examples", "tests"]
+
+[tool.ty.rules]
+# Every suppression must still be needed.
+unused-ignore-comment = "error"
+unused-type-ignore-comment = "error"
+
+[tool.ty.terminal]
+error-on-warning = true

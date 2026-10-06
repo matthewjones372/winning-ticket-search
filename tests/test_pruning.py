@@ -15,12 +15,14 @@ from lottery.pruning import (
     sparsity_report,
 )
 
+from .conftest import tensor
+
 
 def _two_layers(small_scale: float = 0.01) -> nn.Sequential:
     model = nn.Sequential(nn.Linear(10, 10, bias=False), nn.Linear(10, 10, bias=False))
     with torch.no_grad():
-        model[0].weight.copy_(torch.rand(10, 10) * small_scale + small_scale)  # tiny, positive
-        model[1].weight.copy_(torch.rand(10, 10) + 1.0)  # large, positive
+        tensor(model[0], "weight").copy_(torch.rand(10, 10) * small_scale + small_scale)  # tiny
+        tensor(model[1], "weight").copy_(torch.rand(10, 10) + 1.0)  # large, positive
     return model
 
 
@@ -79,7 +81,7 @@ def test_repeated_pruning_takes_a_fraction_of_the_remaining_weights(strategy):
     model = nn.Sequential(nn.Linear(50, 40), nn.Linear(40, 25))
     params = default_prunable_parameters(model)
     attach_masks(params)
-    total = sum(m.weight.numel() for m, _ in params)
+    total = sum(tensor(m, "weight").numel() for m, _ in params)
 
     for k in range(1, 4):
         strategy.prune(params, 0.2)
@@ -109,7 +111,9 @@ def test_pruned_weights_receive_no_gradient_and_negative_weights_still_learn():
 
     layer(torch.randn(8, 20)).pow(2).sum().backward()
 
-    grad, mask, orig = layer.weight_orig.grad, layer.weight_mask, layer.weight_orig
+    orig, mask = tensor(layer, "weight_orig"), get_mask(layer, "weight")
+    grad = orig.grad
+    assert grad is not None
     assert torch.all(grad[mask == 0] == 0)
     alive_negative = (mask == 1) & (orig < 0)
     assert alive_negative.any()
@@ -122,7 +126,7 @@ def test_attach_masks_is_idempotent():
     attach_masks(params)
     GlobalMagnitudePruning().prune(params, 0.5)
     attach_masks(params)  # must not reset the existing mask
-    assert int(layer.weight_mask.sum()) == 8
+    assert int(get_mask(layer, "weight").sum()) == 8
 
 
 def test_get_mask_on_unpruned_module_is_all_ones():
@@ -171,13 +175,13 @@ def test_global_pruning_ranks_live_weights_not_the_stale_forward_copy():
     params = default_prunable_parameters(model)
     attach_masks(params)
     with torch.no_grad():  # simulate training that never runs another forward
-        model[0].weight_orig.fill_(0.01)
-        model[1].weight_orig.fill_(1.0)
+        tensor(model[0], "weight_orig").fill_(0.01)
+        tensor(model[1], "weight_orig").fill_(1.0)
 
     GlobalMagnitudePruning().prune(params, 0.5)
 
-    assert int(model[0].weight_mask.sum()) == 0
-    assert int(model[1].weight_mask.sum()) == 100
+    assert int(get_mask(model[0], "weight").sum()) == 0
+    assert int(get_mask(model[1], "weight").sum()) == 100
 
 
 def test_masked_parameters_finds_every_mask():
@@ -192,11 +196,12 @@ def test_layerwise_pruning_ranks_live_weights_not_the_stale_forward_copy():
     params = default_prunable_parameters(model)
     attach_masks(params)
     with torch.no_grad():  # simulate training that never runs another forward
-        model[0].weight_orig.copy_(torch.arange(100.0).reshape(10, 10))
+        tensor(model[0], "weight_orig").copy_(torch.arange(100.0).reshape(10, 10))
 
     LayerwiseMagnitudePruning().prune(params, 0.5)
 
-    assert torch.equal(model[0].weight_mask.flatten(), (torch.arange(100) >= 50).float())
+    expected = (torch.arange(100) >= 50).float()
+    assert torch.equal(get_mask(model[0], "weight").flatten(), expected)
 
 
 class HeadFirst(nn.Module):

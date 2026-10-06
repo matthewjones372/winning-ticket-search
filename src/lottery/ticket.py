@@ -6,17 +6,22 @@ import inspect
 import logging
 import math
 import warnings
-from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass, field
+from collections.abc import Callable, Sequence, Sized
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, TypedDict, TypeGuard
 
 import torch
 from torch import nn
 
-from lottery.callbacks import Callback
-from lottery.checkpoint import load_checkpoint, save_checkpoint
+from lottery.checkpoint import (
+    MetricsRecord,
+    RoundRecord,
+    SearchConfig,
+    load_checkpoint,
+    save_checkpoint,
+)
 from lottery.pruning import (
     GlobalMagnitudePruning,
     LayerSparsity,
@@ -29,7 +34,16 @@ from lottery.pruning import (
     overall_density,
     sparsity_report,
 )
-from lottery.training import EpochResult, Metrics, StepCallback, Trainer
+from lottery.training import (
+    EpochReportingTrainer,
+    EpochResult,
+    Metrics,
+    StepCallback,
+    Trainer,
+)
+
+if TYPE_CHECKING:
+    from lottery.callbacks import Callback
 
 log = logging.getLogger(__name__)
 
@@ -129,6 +143,18 @@ def _reset_parameters(model: nn.Module) -> None:
         reset = getattr(module, "reset_parameters", None)
         if callable(reset):
             reset()
+
+
+class TicketOptions(TypedDict, total=False):
+    """The keyword options of :class:`WinningTicket`, for subclasses that pass them on."""
+
+    strategy: PruningStrategy | None
+    parameters: ParameterSelector
+    rewind: Rewind | str
+    rewind_step: int
+    checkpoint_dir: str | Path | None
+    checkpoint_every: int | None
+    callbacks: Sequence[Callback]
 
 
 class WinningTicket:
@@ -295,7 +321,8 @@ class WinningTicket:
             torch.set_rng_state(checkpoint.rng_state.cpu())
 
     def __call__(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.model(inputs)  # type: ignore[no-any-return]
+        output: torch.Tensor = self.model(inputs)
+        return output
 
     def __repr__(self) -> str:
         return f"WinningTicket(density={self.density():.4f}, rounds={self.rounds_completed})"
@@ -308,14 +335,14 @@ class WinningTicket:
 
     # ------------------------------------------------------------------ internals
 
-    def _config(self) -> dict[str, Any]:
+    def _config(self) -> SearchConfig:
         return {
             "rewind": str(self.rewind),
             "rewind_step": self.rewind_step,
             "strategy": type(self.strategy).__qualname__,
         }
 
-    def _check_config(self, saved: dict[str, Any]) -> None:
+    def _check_config(self, saved: SearchConfig) -> None:
         mine = self._config()
         if (saved["rewind"], saved["rewind_step"]) != (mine["rewind"], mine["rewind_step"]):
             raise ValueError(
@@ -405,17 +432,15 @@ class WinningTicket:
     def _fit(
         self, round_: int, epochs: int, on_step: StepCallback | None = None
     ) -> list[EpochResult]:
-        kwargs: dict[str, Any] = {}
-        if on_step is not None:
-            kwargs["on_step"] = on_step
-        if self.callbacks and _accepts_on_epoch(self.trainer):
+        trainer = self.trainer
+        if not (self.callbacks and _reports_epochs(trainer)):
+            return trainer.fit(self.model, epochs, on_step=on_step)
 
-            def on_epoch(result: EpochResult) -> None:
-                for callback in self.callbacks:
-                    callback.on_epoch_end(self, round_, result)
+        def on_epoch(result: EpochResult) -> None:
+            for callback in self.callbacks:
+                callback.on_epoch_end(self, round_, result)
 
-            kwargs["on_epoch"] = on_epoch
-        return self.trainer.fit(self.model, epochs, **kwargs)
+        return trainer.fit(self.model, epochs, on_step=on_step, on_epoch=on_epoch)
 
     def _fit_capturing_late_snapshot(self, round_: int, epochs: int) -> list[EpochResult]:
         steps = _steps_per_epoch(self.trainer)
@@ -457,13 +482,16 @@ class WinningTicket:
 
 def _steps_per_epoch(trainer: Trainer) -> int | None:
     """Optimiser steps per epoch, if the trainer has a sized ``train_loader``."""
+    loader = getattr(trainer, "train_loader", None)
+    if not isinstance(loader, Sized):
+        return None
     try:
-        return len(trainer.train_loader)  # type: ignore[attr-defined]
-    except (AttributeError, TypeError):
+        return len(loader)
+    except TypeError:  # a DataLoader over an IterableDataset without __len__
         return None
 
 
-def _accepts_on_epoch(trainer: Trainer) -> bool:
+def _reports_epochs(trainer: Trainer) -> TypeGuard[EpochReportingTrainer]:
     """Whether ``trainer.fit`` takes an ``on_epoch`` callback (it is optional; see Trainer)."""
     try:
         parameters = inspect.signature(trainer.fit).parameters
@@ -485,15 +513,36 @@ def _describe(result: RoundResult) -> str:
     return "  ".join(parts)
 
 
-def _round_to_dict(result: RoundResult) -> dict[str, Any]:
-    return asdict(result)
+def _round_to_dict(result: RoundResult) -> RoundRecord:
+    return {
+        "round": result.round,
+        "density": result.density,
+        "epochs": [
+            {
+                "epoch": e.epoch,
+                "train": _metrics_record(e.train),
+                "test": _metrics_record(e.test),
+                "val": None if e.val is None else _metrics_record(e.val),
+            }
+            for e in result.epochs
+        ],
+        "layers": [
+            {"name": layer.name, "remaining": layer.remaining, "total": layer.total}
+            for layer in result.layers
+        ],
+        "extra_metrics": {k: _metrics_record(m) for k, m in result.extra_metrics.items()},
+    }
 
 
-def _metrics(data: dict[str, float]) -> Metrics:
+def _metrics_record(metrics: Metrics) -> MetricsRecord:
+    return {"loss": metrics.loss, "accuracy": metrics.accuracy}
+
+
+def _metrics(data: MetricsRecord) -> Metrics:
     return Metrics(loss=float(data["loss"]), accuracy=float(data["accuracy"]))
 
 
-def _round_from_dict(data: dict[str, Any]) -> RoundResult:
+def _round_from_dict(data: RoundRecord) -> RoundResult:
     return RoundResult(
         round=int(data["round"]),
         density=float(data["density"]),
@@ -502,7 +551,7 @@ def _round_from_dict(data: dict[str, Any]) -> RoundResult:
                 epoch=int(e["epoch"]),
                 train=_metrics(e["train"]),
                 test=_metrics(e["test"]),
-                val=None if e.get("val") is None else _metrics(e["val"]),
+                val=None if (val := e.get("val")) is None else _metrics(val),
             )
             for e in data["epochs"]
         ],

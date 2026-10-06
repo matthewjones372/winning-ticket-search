@@ -58,14 +58,14 @@ def attach_masks(parameters: Sequence[PrunableParameter]) -> None:
     """Attach an all-ones mask to each parameter that does not have one yet."""
     for module, name in parameters:
         if not is_masked(module, name):
-            prune.identity(module, name)  # type: ignore[no-untyped-call]
+            prune.identity(module, name)
 
 
 def remove_masks(parameters: Sequence[PrunableParameter]) -> None:
     """Bake masks into the weights and drop the pruning re-parametrisation."""
     for module, name in parameters:
         if is_masked(module, name):
-            prune.remove(module, name)  # type: ignore[no-untyped-call]
+            prune.remove(module, name)
 
 
 def masked_parameters(model: nn.Module) -> list[PrunableParameter]:
@@ -160,7 +160,7 @@ class LayerwiseMagnitudePruning:
         for (module, name), output in zip(parameters, is_output, strict=True):
             amount = fraction * self.output_layer_scale if output else fraction
             if amount > 0:
-                prune.l1_unstructured(  # type: ignore[no-untyped-call]
+                prune.l1_unstructured(
                     module, name, amount=amount, importance_scores=_live_weights(module, name)
                 )
 

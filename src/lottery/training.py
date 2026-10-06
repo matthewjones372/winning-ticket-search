@@ -6,13 +6,15 @@ import logging
 from collections.abc import Callable, Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import torch
 from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
-from torch.utils.data import DataLoader
+
+if TYPE_CHECKING:
+    from torch.utils.data import DataLoader
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +55,18 @@ class Trainer(Protocol):
     ) -> list[EpochResult]: ...
 
     def evaluate(self, model: nn.Module, device: torch.device | None = None) -> Metrics: ...
+
+
+class EpochReportingTrainer(Trainer, Protocol):
+    """A :class:`Trainer` whose ``fit`` also reports each epoch as it finishes."""
+
+    def fit(
+        self,
+        model: nn.Module,
+        epochs: int,
+        on_step: StepCallback | None = None,
+        on_epoch: EpochCallback | None = None,
+    ) -> list[EpochResult]: ...
 
 
 def sgd(lr: float = 0.01, momentum: float = 0.9, weight_decay: float = 5e-4) -> OptimiserFactory:

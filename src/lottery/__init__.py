@@ -12,9 +12,17 @@ from lottery.pruning import (
     PruningStrategy,
     default_prunable_parameters,
 )
-from lottery.ticket import Rewind, RoundResult, SearchResult, WinningTicket, rounds_for_density
+from lottery.ticket import (
+    Rewind,
+    RoundResult,
+    SearchResult,
+    TicketOptions,
+    WinningTicket,
+    rounds_for_density,
+)
 from lottery.training import (
     ClassificationTrainer,
+    EpochReportingTrainer,
     EpochResult,
     Metrics,
     Trainer,
@@ -36,6 +44,7 @@ __all__ = [
     "Checkpoint",
     "ClassificationTrainer",
     "CsvLogger",
+    "EpochReportingTrainer",
     "EpochResult",
     "GlobalMagnitudePruning",
     "LayerSparsity",
@@ -46,6 +55,7 @@ __all__ = [
     "Rewind",
     "RoundResult",
     "SearchResult",
+    "TicketOptions",
     "Trainer",
     "WinningTicket",
     "__version__",

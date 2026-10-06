@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import NotRequired, TypedDict
 
 import torch
 from torch import nn
@@ -21,12 +21,49 @@ FORMAT_VERSION = 2
 READABLE_VERSIONS = (1, 2)
 
 
+class MetricsRecord(TypedDict):
+    loss: float
+    accuracy: float
+
+
+class EpochRecord(TypedDict):
+    epoch: int
+    train: MetricsRecord
+    test: MetricsRecord
+    val: NotRequired[MetricsRecord | None]
+    """Absent from histories written before validation metrics existed."""
+
+
+class LayerRecord(TypedDict):
+    name: str
+    remaining: int
+    total: int
+
+
+class RoundRecord(TypedDict):
+    """One :class:`~lottery.RoundResult`, as stored in a checkpoint's history."""
+
+    round: int
+    density: float
+    epochs: list[EpochRecord]
+    layers: list[LayerRecord]
+    extra_metrics: dict[str, MetricsRecord]
+
+
+class SearchConfig(TypedDict):
+    """The search settings a checkpoint must agree with to be resumed."""
+
+    rewind: str
+    rewind_step: int
+    strategy: str
+
+
 @dataclass(frozen=True, slots=True)
 class Checkpoint:
     rounds_completed: int
     rewind_state: dict[str, torch.Tensor] | None
-    history: list[dict[str, Any]] = field(default_factory=list)
-    config: dict[str, Any] | None = None
+    history: list[RoundRecord] = field(default_factory=list)
+    config: SearchConfig | None = None
     """The search settings it was saved with; ``None`` for version 1 checkpoints."""
     rng_state: torch.Tensor | None = None
     """``torch.get_rng_state()`` at save time; ``None`` for version 1 checkpoints."""
@@ -38,8 +75,8 @@ def save_checkpoint(
     model: nn.Module,
     rewind_state: dict[str, torch.Tensor] | None,
     rounds_completed: int,
-    history: list[dict[str, Any]] | None = None,
-    config: dict[str, Any] | None = None,
+    history: list[RoundRecord] | None = None,
+    config: SearchConfig | None = None,
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

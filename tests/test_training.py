@@ -14,6 +14,8 @@ from lottery.training import (
     sgd,
 )
 
+from .conftest import tensor
+
 
 def test_reported_loss_is_the_actual_loss(tiny_net, trainer, classification_data):
     """Regression: 'loss' used to be MAE between predicted and true class indices."""
@@ -115,10 +117,10 @@ def test_optimiser_factories():
 def test_frozen_parameters_are_not_optimised(classification_data):
     model = nn.Sequential(nn.Linear(8, 3))
     model[0].bias.requires_grad_(False)
-    before = model[0].bias.clone()
+    before = tensor(model[0], "bias").clone()
     loader = DataLoader(TensorDataset(torch.randn(8, 8), torch.zeros(8, dtype=torch.long)))
     ClassificationTrainer(nn.CrossEntropyLoss(), loader, loader).fit(model, epochs=1)
-    assert torch.equal(model[0].bias, before)
+    assert torch.equal(tensor(model[0], "bias"), before)
 
 
 def test_val_loader_is_evaluated_every_epoch(tiny_net, classification_data):

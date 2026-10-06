@@ -6,25 +6,26 @@ from torch import nn
 
 pytest.importorskip("torchao")
 
+from torchao.quantization import IntxUnpackedToInt8Tensor
 from torchao.quantization.qat import FakeQuantizedLinear
 
 from lottery import CsvLogger
-from lottery.pruning import GlobalMagnitudePruning, default_prunable_parameters
+from lottery.pruning import GlobalMagnitudePruning, default_prunable_parameters, get_mask
 from lottery.qat import QatWinningTicket, convert_qat, prepare_qat
 
-from .conftest import ShiftTrainer, TinyNet
+from .conftest import ShiftTrainer, TinyNet, tensor
 
 
 def test_prepare_swaps_linear_layers_for_fake_quantised_ones():
     model = prepare_qat(TinyNet())
-    assert isinstance(model.fc1, FakeQuantizedLinear)
+    assert isinstance(model.get_submodule("fc1"), FakeQuantizedLinear)
     assert isinstance(model.bn, nn.BatchNorm1d)
 
 
 def test_prepare_respects_filter():
     model = prepare_qat(TinyNet(), filter_fn=lambda module, fqn: fqn == "fc2")
-    assert type(model.fc1) is nn.Linear
-    assert isinstance(model.fc2, FakeQuantizedLinear)
+    assert type(model.get_submodule("fc1")) is nn.Linear
+    assert isinstance(model.get_submodule("fc2"), FakeQuantizedLinear)
 
 
 def test_fake_quantised_layers_are_prunable_and_masked_in_forward():
@@ -34,7 +35,9 @@ def test_fake_quantised_layers_are_prunable_and_masked_in_forward():
     GlobalMagnitudePruning().prune(params, 0.5)
     model.eval()
     model(torch.randn(4, 8)).sum().backward()
-    assert torch.all(model.fc1.weight_orig.grad[model.fc1.weight_mask == 0] == 0)
+    grad = tensor(model.get_submodule("fc1"), "weight_orig").grad
+    assert grad is not None
+    assert torch.all(grad[get_mask(model.get_submodule("fc1"), "weight") == 0] == 0)
 
 
 def test_convert_preserves_sparsity_and_leaves_source_untouched():
@@ -45,11 +48,11 @@ def test_convert_preserves_sparsity_and_leaves_source_untouched():
 
     quantised = convert_qat(model)
 
-    weight = quantised.fc1.weight
-    assert type(quantised.fc1) is nn.Linear
-    assert type(weight).__name__ == "IntxUnpackedToInt8Tensor"
-    assert torch.all(weight.qdata[model.fc1.weight_mask == 0] == 0)
-    assert hasattr(model.fc1, "weight_mask"), "source model must keep its masks"
+    weight = tensor(quantised.get_submodule("fc1"), "weight")
+    assert type(quantised.get_submodule("fc1")) is nn.Linear
+    assert isinstance(weight, IntxUnpackedToInt8Tensor)
+    assert torch.all(weight.qdata[get_mask(model.get_submodule("fc1"), "weight") == 0] == 0)
+    assert hasattr(model.get_submodule("fc1"), "weight_mask"), "source model must keep its masks"
     x = torch.randn(4, 8)
     assert torch.allclose(quantised(x), model(x), atol=0.2)
 
@@ -96,8 +99,10 @@ def test_quantised_model_with_custom_parameter_selector():
     ticket = QatWinningTicket(
         TinyNet(),
         ShiftTrainer(delta=0.0),
-        parameters=lambda m: [(m.fc2, "weight")],
+        parameters=lambda m: [(m.get_submodule("fc2"), "weight")],
     )
     ticket.search(rounds=1, epochs=1, prune_fraction=0.5)
     quantised = ticket.quantised_model()
-    assert int((quantised.fc2.weight.qdata == 0).sum()) >= 24
+    weight = tensor(quantised.get_submodule("fc2"), "weight")
+    assert isinstance(weight, IntxUnpackedToInt8Tensor)
+    assert int((weight.qdata == 0).sum()) >= 24

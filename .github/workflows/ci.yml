@@ -23,7 +23,7 @@ jobs:
       - run: uv sync --locked --group cpu --extra qat --extra vision
       - run: uv run ruff format --check .
       - run: uv run ruff check .
-      - run: uv run mypy src examples
+      - run: uv run ty check
 
   test:
     strategy:
