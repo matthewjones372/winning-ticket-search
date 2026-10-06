@@ -9,6 +9,7 @@ truly int8-quantised model.
 import argparse
 import logging
 
+import torch
 from _data import mnist
 from torch import nn
 
@@ -26,7 +27,9 @@ def main() -> None:
     parser.add_argument(
         "--fake-data", action="store_true", help="random images instead of downloading"
     )
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
+    torch.manual_seed(args.seed)  # weights, shuffling and random re-init
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     train_loader, val_loader, test_loader = mnist(limit=args.limit, fake=args.fake_data)

@@ -35,7 +35,9 @@ def main() -> None:
     parser.add_argument(
         "--fake-data", action="store_true", help="random images instead of downloading"
     )
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
+    torch.manual_seed(args.seed)  # weights, shuffling and random re-init
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     dev = device()

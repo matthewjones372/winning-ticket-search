@@ -35,9 +35,10 @@ def test_fake_quantised_layers_are_prunable_and_masked_in_forward():
     GlobalMagnitudePruning().prune(params, 0.5)
     model.eval()
     model(torch.randn(4, 8)).sum().backward()
-    grad = tensor(model.get_submodule("fc1"), "weight_orig").grad
+    fc1 = model.get_submodule("fc1")
+    grad = tensor(fc1, "weight_orig").grad
     assert grad is not None
-    assert torch.all(grad[get_mask(model.get_submodule("fc1"), "weight") == 0] == 0)
+    assert torch.all(grad[get_mask(fc1, "weight") == 0] == 0)
 
 
 def test_convert_preserves_sparsity_and_leaves_source_untouched():
@@ -48,11 +49,12 @@ def test_convert_preserves_sparsity_and_leaves_source_untouched():
 
     quantised = convert_qat(model)
 
-    weight = tensor(quantised.get_submodule("fc1"), "weight")
-    assert type(quantised.get_submodule("fc1")) is nn.Linear
+    source_fc1, quantised_fc1 = model.get_submodule("fc1"), quantised.get_submodule("fc1")
+    weight = tensor(quantised_fc1, "weight")
+    assert type(quantised_fc1) is nn.Linear
     assert isinstance(weight, IntxUnpackedToInt8Tensor)
-    assert torch.all(weight.qdata[get_mask(model.get_submodule("fc1"), "weight") == 0] == 0)
-    assert hasattr(model.get_submodule("fc1"), "weight_mask"), "source model must keep its masks"
+    assert torch.all(weight.qdata[get_mask(source_fc1, "weight") == 0] == 0)
+    assert hasattr(source_fc1, "weight_mask"), "source model must keep its masks"
     x = torch.randn(4, 8)
     assert torch.allclose(quantised(x), model(x), atol=0.2)
 

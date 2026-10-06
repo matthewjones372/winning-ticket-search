@@ -1,6 +1,7 @@
 import pytest
 import torch
 from torch import nn
+from torch.nn.utils import prune
 
 from lottery.pruning import (
     GlobalMagnitudePruning,
@@ -9,6 +10,7 @@ from lottery.pruning import (
     attach_masks,
     default_prunable_parameters,
     get_mask,
+    is_masked,
     masked_parameters,
     overall_density,
     remove_masks,
@@ -249,3 +251,22 @@ def test_buffers_named_like_masks_are_not_pruning_masks():
     assert masked_parameters(model) == []
     attach_masks(default_prunable_parameters(model))
     assert masked_parameters(model) == [(model.fc, "weight")]
+
+
+def test_the_torch_internals_mask_detection_reads():
+    """is_masked() and masked_parameters() read torch.nn.utils.prune's private hook
+    attributes, as torch's own prune.is_pruned does. If a torch upgrade fails this test,
+    they need rewriting against whatever replaced them."""
+    layer = nn.Linear(4, 4)
+    prune.l1_unstructured(layer, "weight", amount=0.5)
+    prune.l1_unstructured(layer, "weight", amount=0.5)  # wraps both in a PruningContainer
+
+    hooks = [h for h in layer._forward_pre_hooks.values() if isinstance(h, prune.BasePruningMethod)]
+    assert len(hooks) == 1
+    assert isinstance(hooks[0], prune.PruningContainer)
+    assert hooks[0]._tensor_name == "weight"
+
+    assert is_masked(layer, "weight")
+    assert not is_masked(layer, "bias")
+    assert masked_parameters(layer) == [(layer, "weight")]
+    assert prune.is_pruned(layer)

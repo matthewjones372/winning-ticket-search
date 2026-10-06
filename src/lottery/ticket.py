@@ -315,10 +315,11 @@ class WinningTicket:
         self._rewind_state = checkpoint.rewind_state
         self.rounds_completed = checkpoint.rounds_completed
         self.history = [_round_from_dict(r) for r in checkpoint.history]
+        # So the rounds after a resume draw the same random numbers as an uninterrupted
+        # run would (random re-init, shuffling, dropout).
         if checkpoint.rng_state is not None:
-            # So the rounds after a resume draw the same random numbers as an uninterrupted
-            # run would (random re-init, shuffling); CUDA generators are not restored.
             torch.set_rng_state(checkpoint.rng_state.cpu())
+        _restore_cuda_rng(checkpoint.cuda_rng_state)
 
     def __call__(self, inputs: torch.Tensor) -> torch.Tensor:
         output: torch.Tensor = self.model(inputs)
@@ -478,6 +479,19 @@ class WinningTicket:
                         getattr(module, f"{name}_orig").copy_(getattr(module, name))
             case Rewind.NONE:
                 pass
+
+
+def _restore_cuda_rng(states: list[torch.Tensor] | None) -> None:
+    if states is None or not torch.cuda.is_available():
+        return  # nothing saved, or nothing to restore it into
+    if len(states) != torch.cuda.device_count():
+        warnings.warn(
+            f"checkpoint holds CUDA RNG state for {len(states)} GPUs but "
+            f"{torch.cuda.device_count()} are visible; leaving the CUDA generators as they are",
+            stacklevel=3,
+        )
+        return
+    torch.cuda.set_rng_state_all([state.cpu() for state in states])
 
 
 def _steps_per_epoch(trainer: Trainer) -> int | None:
