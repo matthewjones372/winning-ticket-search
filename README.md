@@ -14,6 +14,13 @@ It supports:
 - per-round CSV metrics, per-layer sparsity, and resumable `state_dict` checkpoints
 - a silent library: standard `logging`, plus opt-in callbacks for progress bars and CSV files
 
+## Install
+
+```shell
+pip install lottery            # bring your own PyTorch build
+pip install 'lottery[qat]'     # with quantisation-aware training via torchao
+```
+
 ## Quick start
 
 ```python
@@ -188,6 +195,18 @@ uv run pytest --cov
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src examples
 ```
+
+### Releasing
+
+Bump `version` in `pyproject.toml` (and the assertion in `tests/test_package.py`), merge,
+then publish a GitHub release whose tag is that version, without a `v` prefix:
+
+```shell
+gh release create 2.1.0 --generate-notes
+```
+
+The `Publish` workflow checks that the tag matches the version, runs the tests, builds and
+uploads to PyPI with trusted publishing.
 
 ## Upgrading from 1.x
 

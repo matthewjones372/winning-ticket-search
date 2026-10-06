@@ -1,0 +1,60 @@
+name: Publish
+
+# Publishes to PyPI when a GitHub release is published. Uses trusted publishing (OIDC),
+# so there is no API token to store: PyPI trusts this workflow file in this repository,
+# running in the `pypi` environment.
+#
+# To publish a release that existed before this workflow, run it by hand with that tag:
+#   gh workflow run publish.yml -f tag=2.0.0
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: astral-sh/setup-uv@v10.2.0
+      - name: Check the tag matches the package version
+        run: |
+          version=$(uv version --short)
+          if [ "$version" != "$TAG" ]; then
+            echo "::error::tag $TAG does not match the version in pyproject.toml ($version)"
+            exit 1
+          fi
+      - run: uv sync --locked --group cpu --extra qat
+      - run: uv run pytest -q
+      - run: uv build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/lottery/
+    permissions:
+      id-token: write # trusted publishing; also signs PEP 740 attestations
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@v1.14.2
