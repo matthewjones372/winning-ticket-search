@@ -39,11 +39,12 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     dev = device()
-    train_loader, test_loader = cifar10(limit=args.limit, fake=args.fake_data)
+    train_loader, val_loader, test_loader = cifar10(limit=args.limit, fake=args.fake_data)
     trainer = ClassificationTrainer(
         loss_fn=nn.CrossEntropyLoss(),
         train_loader=train_loader,
         test_loader=test_loader,
+        val_loader=val_loader,
         device=dev,
         optimiser=sgd(lr=0.05, momentum=0.9, weight_decay=5e-4),
         scheduler=cosine_annealing,

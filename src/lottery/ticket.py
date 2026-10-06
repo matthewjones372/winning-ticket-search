@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import math
 import warnings
@@ -28,7 +29,7 @@ from lottery.pruning import (
     overall_density,
     sparsity_report,
 )
-from lottery.training import EpochResult, Metrics, Trainer
+from lottery.training import EpochResult, Metrics, StepCallback, Trainer
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +62,10 @@ class RoundResult:
     def final_test(self) -> Metrics | None:
         return self.epochs[-1].test if self.epochs else None
 
+    @property
+    def final_val(self) -> Metrics | None:
+        return self.epochs[-1].val if self.epochs else None
+
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
@@ -73,21 +78,24 @@ class SearchResult:
     ) -> RoundResult:
         """The sparsest round scoring within ``tolerance`` of the dense round (round 0).
 
-        ``metric`` scores a round, higher is better; it defaults to the final epoch's test
-        accuracy, and ``tolerance`` is in its units (0.005 is half a point of a 0-1
-        accuracy). For a QAT search, score the real quantised model with
-        ``metric=lambda r: r.extra_metrics["quantised"].accuracy``.
-
-        Picking rounds by the same data you report on is optimistic. If that matters,
-        give the trainer a validation loader as ``test_loader`` and evaluate the chosen
-        ticket on held-out data afterwards.
+        ``metric`` scores a round, higher is better, and ``tolerance`` is in its units
+        (0.005 is half a point of a 0-1 accuracy). By default it is the final epoch's
+        validation accuracy if the dense round has one (see
+        ``ClassificationTrainer.val_loader``), otherwise its test accuracy -- which makes
+        the reported test accuracy of the chosen round optimistic. For a QAT search, score
+        the real quantised model with ``metric=lambda r: r.extra_metrics["quantised"].accuracy``.
         """
         if not self.rounds:
             raise ValueError("no rounds recorded")
-        score = metric or _final_test_accuracy
         dense = next((r for r in self.rounds if r.round == 0), None)
         if dense is None:
             raise ValueError("the dense round (round 0) is not in this result")
+        if metric is not None:
+            score = metric
+        elif dense.final_val is not None:
+            score = _final_val_accuracy
+        else:
+            score = _final_test_accuracy
         baseline = score(dense)
         if baseline is None or math.isnan(baseline):
             raise ValueError("the dense round has no score to compare the others against")
@@ -99,6 +107,10 @@ class SearchResult:
 
 def _final_test_accuracy(result: RoundResult) -> float | None:
     return result.final_test.accuracy if result.final_test is not None else None
+
+
+def _final_val_accuracy(result: RoundResult) -> float | None:
+    return result.final_val.accuracy if result.final_val is not None else None
 
 
 def rounds_for_density(target_density: float, prune_fraction: float) -> int:
@@ -333,6 +345,8 @@ class WinningTicket:
             callback.on_search_start(self, expected_rounds)
         try:
             while keep_going():
+                for callback in self.callbacks:
+                    callback.on_round_start(self, self.rounds_completed, epochs)
                 result = self._train_round(self.rounds_completed, epochs, prune_fraction)
                 for callback in self.callbacks:
                     callback.on_round_end(self, result)
@@ -351,9 +365,9 @@ class WinningTicket:
         layers = sparsity_report(self.model, self.parameters)
         density = overall_density(layers)
         if self._needs_late_snapshot():
-            epochs_result = self._fit_capturing_late_snapshot(epochs)
+            epochs_result = self._fit_capturing_late_snapshot(round_, epochs)
         else:
-            epochs_result = self.trainer.fit(self.model, epochs)
+            epochs_result = self._fit(round_, epochs)
 
         result = RoundResult(
             round=round_,
@@ -388,7 +402,22 @@ class WinningTicket:
         if step == self.rewind_step and self._rewind_state is None:
             self._rewind_state = self._snapshot()
 
-    def _fit_capturing_late_snapshot(self, epochs: int) -> list[EpochResult]:
+    def _fit(
+        self, round_: int, epochs: int, on_step: StepCallback | None = None
+    ) -> list[EpochResult]:
+        kwargs: dict[str, Any] = {}
+        if on_step is not None:
+            kwargs["on_step"] = on_step
+        if self.callbacks and _accepts_on_epoch(self.trainer):
+
+            def on_epoch(result: EpochResult) -> None:
+                for callback in self.callbacks:
+                    callback.on_epoch_end(self, round_, result)
+
+            kwargs["on_epoch"] = on_epoch
+        return self.trainer.fit(self.model, epochs, **kwargs)
+
+    def _fit_capturing_late_snapshot(self, round_: int, epochs: int) -> list[EpochResult]:
         steps = _steps_per_epoch(self.trainer)
         if steps is not None and steps * epochs < self.rewind_step:
             raise ValueError(
@@ -396,7 +425,7 @@ class WinningTicket:
                 f"only {steps * epochs} steps ({epochs} epochs of {steps})"
             )
         initial = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
-        results = self.trainer.fit(self.model, epochs, on_step=self._capture_rewind)
+        results = self._fit(round_, epochs, on_step=self._capture_rewind)
         if self._rewind_state is None:
             # Put the untrained weights back so a retry starts from the real init.
             self.model.load_state_dict(initial)
@@ -434,9 +463,22 @@ def _steps_per_epoch(trainer: Trainer) -> int | None:
         return None
 
 
+def _accepts_on_epoch(trainer: Trainer) -> bool:
+    """Whether ``trainer.fit`` takes an ``on_epoch`` callback (it is optional; see Trainer)."""
+    try:
+        parameters = inspect.signature(trainer.fit).parameters
+    except (TypeError, ValueError):
+        return False
+    return "on_epoch" in parameters or any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()
+    )
+
+
 def _describe(result: RoundResult) -> str:
     """One log line per round: ``round 3  density 51.20%  test acc 0.9712  quantised 0.9650``."""
     parts = [f"round {result.round}", f"density {result.density:.2%}"]
+    if result.final_val is not None:
+        parts.append(f"val acc {result.final_val.accuracy:.4f}")
     if result.final_test is not None:
         parts.append(f"test acc {result.final_test.accuracy:.4f}")
     parts += [f"{name} {m.accuracy:.4f}" for name, m in result.extra_metrics.items()]
@@ -456,7 +498,12 @@ def _round_from_dict(data: dict[str, Any]) -> RoundResult:
         round=int(data["round"]),
         density=float(data["density"]),
         epochs=[
-            EpochResult(epoch=int(e["epoch"]), train=_metrics(e["train"]), test=_metrics(e["test"]))
+            EpochResult(
+                epoch=int(e["epoch"]),
+                train=_metrics(e["train"]),
+                test=_metrics(e["test"]),
+                val=None if e.get("val") is None else _metrics(e["val"]),
+            )
             for e in data["epochs"]
         ],
         layers=[LayerSparsity(**layer) for layer in data["layers"]],

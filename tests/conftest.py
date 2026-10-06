@@ -7,7 +7,13 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from lottery.training import ClassificationTrainer, EpochResult, Metrics, StepCallback
+from lottery.training import (
+    ClassificationTrainer,
+    EpochCallback,
+    EpochResult,
+    Metrics,
+    StepCallback,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -35,10 +41,15 @@ class ShiftTrainer:
 
     steps_per_epoch: int = 3
     delta: float = 1.0
+    val_accuracy: float | None = None
     fit_calls: list[int] = field(default_factory=list)
 
     def fit(
-        self, model: nn.Module, epochs: int, on_step: StepCallback | None = None
+        self,
+        model: nn.Module,
+        epochs: int,
+        on_step: StepCallback | None = None,
+        on_epoch: EpochCallback | None = None,
     ) -> list[EpochResult]:
         self.fit_calls.append(epochs)
         step = 0
@@ -52,7 +63,10 @@ class ShiftTrainer:
                 if on_step is not None:
                     on_step(step, model)
             m = Metrics(loss=1.0 / (epoch + 1), accuracy=0.5)
-            results.append(EpochResult(epoch=epoch, train=m, test=m))
+            val = None if self.val_accuracy is None else Metrics(0.0, self.val_accuracy)
+            results.append(EpochResult(epoch=epoch, train=m, test=m, val=val))
+            if on_epoch is not None:
+                on_epoch(results[-1])
         return results
 
     def evaluate(self, model: nn.Module, device: torch.device | None = None) -> Metrics:
