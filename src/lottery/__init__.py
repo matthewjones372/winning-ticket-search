@@ -4,11 +4,13 @@ import logging
 from importlib.metadata import PackageNotFoundError, version
 
 from lottery.callbacks import Callback, CsvLogger, ProgressBar
-from lottery.checkpoint import Checkpoint, load_checkpoint, save_checkpoint
+from lottery.checkpoint import Checkpoint, RoundRecord, load_checkpoint, save_checkpoint
 from lottery.pruning import (
     GlobalMagnitudePruning,
     LayerSparsity,
     LayerwiseMagnitudePruning,
+    ParameterSelector,
+    PrunableParameter,
     PruningStrategy,
     default_prunable_parameters,
 )
@@ -19,12 +21,18 @@ from lottery.ticket import (
     TicketOptions,
     WinningTicket,
     rounds_for_density,
+    train_with_masks,
 )
 from lottery.training import (
     ClassificationTrainer,
+    EpochCallback,
     EpochReportingTrainer,
     EpochResult,
     Metrics,
+    OptimiserFactory,
+    ResumableTrainer,
+    SchedulerFactory,
+    StepCallback,
     Trainer,
     adam,
     cosine_annealing,
@@ -44,17 +52,25 @@ __all__ = [
     "Checkpoint",
     "ClassificationTrainer",
     "CsvLogger",
+    "EpochCallback",
     "EpochReportingTrainer",
     "EpochResult",
     "GlobalMagnitudePruning",
     "LayerSparsity",
     "LayerwiseMagnitudePruning",
     "Metrics",
+    "OptimiserFactory",
+    "ParameterSelector",
     "ProgressBar",
+    "PrunableParameter",
     "PruningStrategy",
+    "ResumableTrainer",
     "Rewind",
+    "RoundRecord",
     "RoundResult",
+    "SchedulerFactory",
     "SearchResult",
+    "StepCallback",
     "TicketOptions",
     "Trainer",
     "WinningTicket",
@@ -66,4 +82,5 @@ __all__ = [
     "rounds_for_density",
     "save_checkpoint",
     "sgd",
+    "train_with_masks",
 ]

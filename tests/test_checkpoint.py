@@ -210,3 +210,27 @@ def test_no_cuda_rng_state_without_cuda(tmp_path, monkeypatch):
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     path = WinningTicket(TinyNet(), ShiftTrainer()).save(tmp_path / "t.pt")
     assert torch.load(path, weights_only=True)["cuda_rng_state"] is None
+
+
+def test_a_rejected_checkpoint_leaves_the_ticket_untouched(tmp_path):
+    source = WinningTicket(TinyNet(), ShiftTrainer())
+    source.search(rounds=2, epochs=1)
+    path = source.save(tmp_path / "t.pt")
+
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(), rewind="none")
+    before = {k: v.clone() for k, v in ticket.model.state_dict().items()}
+    with pytest.raises(ValueError, match="rewind"):
+        ticket.load(path)
+    assert ticket.rounds_completed == 0
+    for key, value in ticket.model.state_dict().items():
+        assert torch.equal(value, before[key]), key
+
+
+def test_resuming_with_different_strategy_settings_warns(tmp_path):
+    source = WinningTicket(
+        TinyNet(), ShiftTrainer(), strategy=LayerwiseMagnitudePruning(output_layer_scale=0.5)
+    )
+    path = source.save(tmp_path / "t.pt")
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(), strategy=LayerwiseMagnitudePruning())
+    with pytest.warns(UserWarning, match="output_layer_scale=0.5"):
+        resumed.load(path)

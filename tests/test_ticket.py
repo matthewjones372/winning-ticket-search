@@ -428,3 +428,140 @@ def test_ticket_options_match_the_constructor():
         if p.kind is inspect.Parameter.KEYWORD_ONLY
     ]
     assert keyword_only == list(TicketOptions.__annotations__)
+
+
+class Attention(nn.Module):
+    """Parameters whose modules have no public reset_parameters(): MultiheadAttention's
+    in-projection, and a raw positional embedding."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.attn = nn.MultiheadAttention(8, 2, batch_first=True)
+        self.pos = nn.Parameter(torch.zeros(4, 8))
+        self.fc = nn.Linear(8, 3)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = x + self.pos
+        return self.fc(self.attn(h, h, h)[0].mean(1))
+
+
+def _fc_only(m: nn.Module) -> list[tuple[nn.Module, str]]:
+    return [(m.get_submodule("fc"), "weight")]
+
+
+def test_random_rewind_refuses_parameters_it_cannot_redraw():
+    """Regression: they used to keep their trained values in the 'random' control."""
+    with pytest.raises(ValueError, match="reinit"):
+        WinningTicket(Attention(), ShiftTrainer(), parameters=_fc_only, rewind="random")
+
+
+def test_random_rewind_with_reinit_redraws_every_parameter():
+    model = Attention()
+    trained_once = None
+
+    class Spy(ShiftTrainer):
+        def fit(self, model, epochs, on_step=None, on_epoch=None, start_step=0):
+            nonlocal trained_once
+            results = super().fit(model, epochs, on_step, on_epoch, start_step)
+            if trained_once is None:
+                trained_once = tensor(model.attn, "in_proj_weight").detach().clone()
+            return results
+
+    ticket = WinningTicket(
+        model, Spy(delta=1.0), parameters=_fc_only, rewind="random", reinit=Attention
+    )
+    ticket.search(rounds=1, epochs=1)
+
+    # The factory's pos is zeros, and each round trains it by +1 for 3 steps.
+    assert torch.equal(tensor(model, "pos"), torch.full((4, 8), 3.0))
+    assert trained_once is not None
+    assert not torch.allclose(tensor(model.attn, "in_proj_weight"), trained_once + 3.0)
+    assert ticket.density() < 1.0, "masks survive the redraw"
+
+
+def test_reinit_must_match_the_architecture():
+    ticket = WinningTicket(
+        Attention(), ShiftTrainer(), parameters=_fc_only, rewind="random", reinit=TinyNet
+    )
+    with pytest.raises(ValueError, match="reinit"):
+        ticket.search(rounds=1, epochs=1)
+
+
+def test_reinit_only_applies_to_random_rewind():
+    with pytest.raises(ValueError, match="reinit"):
+        WinningTicket(TinyNet(), ShiftTrainer(), reinit=TinyNet)
+
+
+def test_late_rewinding_resumes_training_at_the_rewind_step():
+    """Frankle et al. 2020: rewind to W_k, then train the remaining T - k steps."""
+    starts: list[int] = []
+
+    class Spy(ShiftTrainer):
+        def fit(self, model, epochs, on_step=None, on_epoch=None, start_step=0):
+            starts.append(start_step)
+            return super().fit(model, epochs, on_step, on_epoch, start_step)
+
+    WinningTicket(TinyNet(), Spy(), rewind_step=2).search(rounds=2, epochs=2)
+    assert starts == [0, 2, 2]
+
+
+@pytest.mark.parametrize("rewind", ["weights", "none", "random"])
+def test_other_rewinds_train_the_whole_schedule(rewind):
+    starts: list[int] = []
+
+    class Spy(ShiftTrainer):
+        def fit(self, model, epochs, on_step=None, on_epoch=None, start_step=0):
+            starts.append(start_step)
+            return super().fit(model, epochs, on_step, on_epoch, start_step)
+
+    WinningTicket(TinyNet(), Spy(), rewind=rewind).search(rounds=2, epochs=1)
+    assert starts == [0, 0, 0]
+
+
+def test_trainer_without_start_step_warns_once_about_late_rewinding():
+    class OldTrainer:
+        def __init__(self):
+            self._inner = ShiftTrainer()
+
+        def fit(self, model, epochs, on_step=None):
+            return self._inner.fit(model, epochs, on_step)
+
+        def evaluate(self, model, device=None):
+            return self._inner.evaluate(model, device)
+
+    ticket = WinningTicket(TinyNet(), OldTrainer(), rewind_step=2)
+    with pytest.warns(UserWarning, match="start_step") as caught:
+        ticket.search(rounds=2, epochs=1)
+    assert len([w for w in caught if "start_step" in str(w.message)]) == 1
+
+
+def test_best_rejects_a_negative_tolerance():
+    with pytest.raises(ValueError, match="tolerance"):
+        SearchResult([_round(0, 1.0, 0.9)]).best(tolerance=-1)
+
+
+def test_train_with_masks_trains_a_fresh_init_under_a_tickets_masks():
+    """Frankle & Carbin's control: the winning ticket's masks, a new random init."""
+    from lottery import train_with_masks
+    from lottery.pruning import overall_density, sparsity_report
+
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(delta=0.0))
+    ticket.search(rounds=2, epochs=1, prune_fraction=0.5)
+    masks = ticket.masks()
+
+    fresh = TinyNet()
+    results = train_with_masks(fresh, masks, ShiftTrainer(delta=1.0), epochs=2)
+
+    assert len(results) == 2
+    for key, mask in masks.items():
+        assert torch.equal(fresh.state_dict()[key], mask), key
+    params = [(fresh.fc1, "weight"), (fresh.fc2, "weight")]
+    assert overall_density(sparsity_report(fresh, params)) == pytest.approx(ticket.density())
+
+
+def test_train_with_masks_rejects_masks_for_another_model():
+    from lottery import train_with_masks
+
+    masks = WinningTicket(TinyNet(), ShiftTrainer()).masks()
+    with pytest.raises(ValueError, match="mask"):
+        train_with_masks(nn.Sequential(nn.Linear(8, 3)), masks, ShiftTrainer(), epochs=1)

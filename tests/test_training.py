@@ -155,3 +155,46 @@ def test_any_torch_optimiser_can_be_passed_with_partial(tiny_net, classification
     )
     results = trainer.fit(tiny_net, epochs=2)
     assert len(results) == 2
+
+
+def test_start_step_resumes_the_schedule_part_way(tiny_net, classification_data):
+    """3 batches an epoch: step 4 is the first batch of epoch 1, with one epoch of decay."""
+    optimisers: list[torch.optim.Optimizer] = []
+
+    def make(params):
+        optimisers.append(torch.optim.SGD(params, lr=1.0))
+        return optimisers[-1]
+
+    trainer = ClassificationTrainer(
+        nn.CrossEntropyLoss(),
+        classification_data,
+        classification_data,
+        optimiser=make,
+        scheduler=lambda opt, epochs: torch.optim.lr_scheduler.StepLR(opt, 1, gamma=0.5),
+    )
+    seen: list[tuple[int, float]] = []
+    results = trainer.fit(
+        tiny_net,
+        epochs=3,
+        start_step=4,
+        on_step=lambda step, model: seen.append((step, optimisers[-1].param_groups[0]["lr"])),
+    )
+    assert [r.epoch for r in results] == [1, 2]
+    assert seen == [(5, 0.5), (6, 0.5), (7, 0.25), (8, 0.25), (9, 0.25)]
+
+
+def test_start_step_past_the_end_is_rejected(tiny_net, trainer):
+    with pytest.raises(ValueError, match="start_step"):
+        trainer.fit(tiny_net, epochs=2, start_step=6)
+
+
+def test_device_can_be_given_as_a_string(tiny_net, classification_data):
+    trainer = ClassificationTrainer(
+        nn.CrossEntropyLoss(),
+        classification_data,
+        classification_data,
+        device="cpu",
+        autocast_dtype=torch.bfloat16,
+    )
+    assert trainer.device == torch.device("cpu")
+    assert len(trainer.fit(tiny_net, epochs=1)) == 1

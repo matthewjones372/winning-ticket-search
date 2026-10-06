@@ -117,7 +117,8 @@ class CsvLogger(Callback):
 
     The first time it sees a search, rows for rounds the ticket has not completed yet are
     dropped: a fresh search starts with empty files, and one resumed from a checkpoint
-    keeps the history before it.
+    keeps the history before it. Use one ``CsvLogger`` per ticket: a second ticket's
+    rounds would be appended to the first's.
     """
 
     def __init__(self, directory: str | Path) -> None:

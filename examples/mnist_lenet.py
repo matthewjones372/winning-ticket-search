@@ -4,19 +4,24 @@ uv run --group cpu --extra vision python examples/mnist_lenet.py --rounds 10 --e
 """
 
 import argparse
+import csv
 import logging
+from pathlib import Path
 
 import torch
 from _data import device, mnist
 from torch import nn
 
 from lottery import (
+    Callback,
     ClassificationTrainer,
     CsvLogger,
     LayerwiseMagnitudePruning,
     ProgressBar,
+    RoundResult,
     WinningTicket,
     adam,
+    train_with_masks,
 )
 from lottery.models import LeNet300100
 
@@ -33,6 +38,11 @@ def main() -> None:
         "--fake-data", action="store_true", help="random images instead of downloading"
     )
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--control",
+        action="store_true",
+        help="also train each round's masks from a fresh init (Frankle & Carbin's control)",
+    )
     args = parser.parse_args()
     torch.manual_seed(args.seed)  # weights, shuffling and random re-init
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -52,7 +62,7 @@ def main() -> None:
         # The paper prunes the output layer at half the rate of the hidden layers.
         strategy=LayerwiseMagnitudePruning(output_layer_scale=0.5),
         rewind=args.rewind,
-        callbacks=[ProgressBar(), CsvLogger(args.output)],
+        callbacks=[ProgressBar(), CsvLogger(args.output), masks := MaskRecorder()],
     )
     result = ticket.search(
         rounds=args.rounds, epochs=args.epochs, prune_fraction=args.prune_fraction
@@ -60,6 +70,32 @@ def main() -> None:
 
     best = result.best()
     print(f"winning ticket: round {best.round}, {best.density:.2%} of weights")
+
+    if args.control:
+        # The same masks, trained once from a new random initialisation.
+        with (Path(args.output) / "control.csv").open("w", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["round", "density", "val_accuracy", "test_accuracy"])
+            for r in result.rounds:
+                final = train_with_masks(
+                    LeNet300100(), masks.by_round[r.round], trainer, args.epochs
+                )[-1]
+                val = final.val.accuracy if final.val is not None else float("nan")
+                writer.writerow([r.round, r.density, val, final.test.accuracy])
+                print(
+                    f"control round {r.round}  density {r.density:.2%}  "
+                    f"val acc {val:.4f}  test acc {final.test.accuracy:.4f}"
+                )
+
+
+class MaskRecorder(Callback):
+    """Keeps each round's masks, to train them again from scratch afterwards."""
+
+    def __init__(self) -> None:
+        self.by_round: dict[int, dict[str, torch.Tensor]] = {}
+
+    def on_round_end(self, ticket: WinningTicket, result: RoundResult) -> None:
+        self.by_round[result.round] = ticket.masks()
 
 
 if __name__ == "__main__":

@@ -10,10 +10,22 @@ is in [`report-public/report.pdf`](report-public/report.pdf).
 It supports:
 
 - global or layer-wise magnitude pruning, built on `torch.nn.utils.prune`
-- rewinding to the original init, late rewinding to step *k* ([Frankle et al. 2020](https://arxiv.org/abs/1912.05671)), random re-init as a control, or no rewind (learning-rate rewinding, [Renda et al. 2020](https://arxiv.org/abs/2003.02389))
+- rewinding to the original init, late rewinding to step *k* ([Frankle et al. 2020](https://arxiv.org/abs/1912.05671)), or no rewind (learning-rate rewinding, [Renda et al. 2020](https://arxiv.org/abs/2003.02389))
+- the random re-initialisation control: a winning ticket's masks trained from a fresh init
 - quantisation-aware training through [torchao](https://github.com/pytorch/ao), with the real int8 model evaluated every round
 - per-round CSV metrics, per-layer sparsity, and resumable `state_dict` checkpoints
 - no output by default: standard `logging`, plus opt-in callbacks for progress bars and CSV files
+
+## Install
+
+The package is not on PyPI; install it from GitHub, pinned to a release:
+
+```shell
+uv add "lottery @ git+https://github.com/matthewjones372/winning-ticket-search@2.2.0"
+uv add "lottery[qat] @ git+https://github.com/matthewjones372/winning-ticket-search@2.2.0"  # with quantisation-aware training via torchao
+```
+
+Bring your own PyTorch build; with pip, `pip install "lottery @ git+https://github.com/matthewjones372/winning-ticket-search@2.2.0"`.
 
 ## Quick start
 
@@ -72,9 +84,33 @@ normalisation layers are left alone. Pass `parameters=` to pick your own.
 ```python
 WinningTicket(model, trainer)  # rewind to init (the original LTH procedure)
 WinningTicket(model, trainer, rewind_step=500)  # late rewinding, needed for deeper conv nets
-WinningTicket(model, trainer, rewind="random")  # random re-init with each layer's own init
 WinningTicket(model, trainer, rewind="none")  # keep trained weights, restart the LR schedule
+WinningTicket(model, trainer, rewind="random", reinit=MyModel)  # IMP with random re-init
 ```
+
+Late rewinding follows Frankle et al. (2020): after pruning, the weights go back to
+those from step *k* and training resumes at step *k*, running the remaining steps with
+the learning-rate schedule where it was. `ClassificationTrainer` supports this; a
+custom trainer needs a `start_step` argument (see below), and without one each round
+replays the whole schedule, with a warning.
+
+**The random re-initialisation control.** Frankle & Carbin's control trains a winning
+ticket's masks once from a fresh random initialisation. That is `train_with_masks`:
+
+```python
+from lottery import train_with_masks
+
+ticket.search(rounds=6, epochs=5)
+control = train_with_masks(LeNet300100(), ticket.masks(), trainer, epochs=5)
+```
+
+`ticket.masks()` holds the masks of the last round; record them in a callback's
+`on_round_end` to keep every round's (as `examples/mnist_lenet.py --control` does).
+`rewind="random"` is a different experiment: an IMP search that re-draws the weights
+every round and so finds its own masks. It re-draws each layer with its own
+`reset_parameters()`; pass `reinit=` a function that builds a fresh model to draw from
+the model's own initialisation instead, which is required when some parameter's module
+has no `reset_parameters()` (attention in-projections, positional embeddings, ...).
 
 ### Optimisers
 
@@ -164,10 +200,20 @@ ticket = WinningTicket(model, AccelerateTrainer(train_loader, test_loader))
 ```
 
 `fit` must build a fresh optimiser on every call, since each pruning round restarts the
-schedule. `on_step` is needed for late rewinding (`rewind_step > 0`). `on_epoch` is optional
-and lets callbacks such as `ProgressBar` see each epoch. With Lightning, the same shape
-works: run a new `lightning.Trainer` inside `fit`, and call `on_step` from a Lightning
-callback's `on_train_batch_end`.
+schedule. `on_step` is needed for late rewinding (`rewind_step > 0`), to capture the
+weights at step *k*. Two more keyword arguments are optional:
+
+- `on_epoch` lets callbacks such as `ProgressBar` see each epoch.
+- `start_step` lets late rewinding resume the schedule at step *k* rather than replaying
+  it; see `ClassificationTrainer.fit` for what it should do.
+
+With Lightning, the same shape works: run a new `lightning.Trainer` inside `fit`, and
+call `on_step` from a Lightning callback's `on_train_batch_end`.
+
+Under `accelerate launch` every process runs the whole search. Training keeps their
+weights in step, but attach file-writing callbacks (`CsvLogger`) and `checkpoint_dir`
+only on the main process (`accelerator.is_main_process`), and give every process the
+same seed. Multi-GPU runs have not been tested.
 
 ### Quantisation-aware training
 
@@ -271,35 +317,41 @@ uv run --group cpu --extra vision --extra qat python examples/mnist_qat.py
 ```
 
 Add `--fake-data --limit 120` to any of them for a quick run on random images, without
-downloading a dataset.
+downloading a dataset; for `cifar10_conv.py` also pass `--rewind-step 1`, since such a
+short run never reaches step 500.
 
 A short MNIST run reproduces the paper's qualitative result: rewound tickets hold or
-improve accuracy as they get sparser, while randomly re-initialised ones degrade. Final
-accuracy of each round, as mean ± standard deviation over seeds 0-2:
+improve accuracy as they get sparser, while the same masks trained from a fresh random
+initialisation (Frankle & Carbin's control, `train_with_masks`) degrade. Final accuracy
+of each round, as mean ± standard deviation over seeds 0-2:
 
-| density | rewind: val | rewind: test | random re-init: val | random re-init: test |
-|--------:|------------:|-------------:|--------------------:|---------------------:|
-| 100%    | 0.943 ± 0.001 | 0.922 ± 0.001 | 0.943 ± 0.001 | 0.922 ± 0.001 |
-| 64%     | 0.948 ± 0.001 | 0.926 ± 0.001 | 0.942 ± 0.004 | 0.914 ± 0.001 |
-| 41%     | 0.954 ± 0.002 | 0.927 ± 0.003 | 0.934 ± 0.003 | 0.900 ± 0.004 |
-| 26%     | 0.955 ± 0.002 | 0.928 ± 0.003 | 0.928 ± 0.002 | 0.892 ± 0.004 |
+| density | ticket: val | ticket: test | control: val | control: test |
+|--------:|------------:|-------------:|-------------:|--------------:|
+| 100%    | 0.943 ± 0.001 | 0.922 ± 0.001 | 0.944 ± 0.003 | 0.922 ± 0.003 |
+| 64%     | 0.948 ± 0.001 | 0.926 ± 0.001 | 0.937 ± 0.001 | 0.903 ± 0.004 |
+| 41%     | 0.954 ± 0.002 | 0.927 ± 0.003 | 0.934 ± 0.003 | 0.901 ± 0.006 |
+| 26%     | 0.955 ± 0.002 | 0.928 ± 0.003 | 0.932 ± 0.004 | 0.898 ± 0.003 |
 
-Choosing by validation accuracy, `best()` picks the sparsest round (26%) for the rewound
-tickets in every seed, and stops at 41-64% for the random re-initialisations. To reproduce
-(10k training images, 2 epochs a round, 6 rounds), with `--rewind random` for the control:
+Choosing by validation accuracy, `best()` picks the sparsest round (26%) in every seed.
+To reproduce (10k training images, 2 epochs a round, 6 rounds; `--control` trains each
+round's masks again from a fresh initialisation):
 
 ```shell
-uv run --group cpu --extra vision python examples/mnist_lenet.py --limit 10000 --epochs 2 --rounds 6 --seed 0
+uv run --group cpu --extra vision python examples/mnist_lenet.py --limit 10000 --epochs 2 --rounds 6 --seed 0 --control
 ```
 
 ## Development
 
 The project uses [uv](https://docs.astral.sh/uv/). Choose a PyTorch build with a
 dependency group: `cpu` (also right for Apple Silicon) or `cu130` (Linux and Windows).
-They are not extras, so `pip install lottery` uses whatever torch you already have.
+They are not extras, so installing the package uses whatever torch you already have.
+
+`uv run` re-syncs to the default dependency groups, which would swap the chosen torch build
+for PyPI's, so run the tools with `UV_NO_SYNC=1` (as CI does) or `uv run --no-sync`:
 
 ```shell
 uv sync --group cpu --extra qat --extra vision
+export UV_NO_SYNC=1
 uv run pytest --cov
 uv run ruff check . && uv run ruff format --check .
 uv run ty check

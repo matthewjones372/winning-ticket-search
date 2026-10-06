@@ -108,3 +108,11 @@ def test_quantised_model_with_custom_parameter_selector():
     weight = tensor(quantised.get_submodule("fc2"), "weight")
     assert isinstance(weight, IntxUnpackedToInt8Tensor)
     assert int((weight.qdata == 0).sum()) >= 24
+
+
+@pytest.mark.parametrize("reinit", [None, TinyNet], ids=["reset_parameters", "reinit"])
+def test_qat_ticket_random_rewind(reinit):
+    ticket = QatWinningTicket(TinyNet(), ShiftTrainer(delta=0.0), rewind="random", reinit=reinit)
+    ticket.search(rounds=1, epochs=1)
+    assert isinstance(ticket.model.get_submodule("fc1"), FakeQuantizedLinear)
+    assert ticket.density() < 1.0

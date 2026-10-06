@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import logging
 import math
@@ -16,6 +17,7 @@ import torch
 from torch import nn
 
 from lottery.checkpoint import (
+    Checkpoint,
     MetricsRecord,
     RoundRecord,
     SearchConfig,
@@ -38,6 +40,7 @@ from lottery.training import (
     EpochReportingTrainer,
     EpochResult,
     Metrics,
+    ResumableTrainer,
     StepCallback,
     Trainer,
 )
@@ -57,7 +60,10 @@ class Rewind(StrEnum):
     """Reset to the snapshot taken at ``rewind_step`` (step 0 is the original init).
     This is the lottery ticket procedure."""
     RANDOM = "random"
-    """Re-draw a fresh random initialisation. The random-reinit control experiment."""
+    """Re-draw a fresh random initialisation every round: IMP with random re-initialisation.
+    This is not quite Frankle & Carbin's control, which trains a *winning ticket's* masks
+    once from a fresh initialisation; use :func:`train_with_masks` for that. Pass
+    ``reinit=`` to draw from the model's own initialisation."""
     NONE = "none"
     """Keep the trained weights and retrain with a fresh optimiser and schedule
     (learning-rate rewinding, Renda et al. 2020)."""
@@ -80,6 +86,45 @@ class RoundResult:
     def final_val(self) -> Metrics | None:
         return self.epochs[-1].val if self.epochs else None
 
+    def to_record(self) -> RoundRecord:
+        """This round as plain data, the form checkpoints store it in."""
+        return {
+            "round": self.round,
+            "density": self.density,
+            "epochs": [
+                {
+                    "epoch": e.epoch,
+                    "train": _metrics_record(e.train),
+                    "test": _metrics_record(e.test),
+                    "val": None if e.val is None else _metrics_record(e.val),
+                }
+                for e in self.epochs
+            ],
+            "layers": [
+                {"name": layer.name, "remaining": layer.remaining, "total": layer.total}
+                for layer in self.layers
+            ],
+            "extra_metrics": {k: _metrics_record(m) for k, m in self.extra_metrics.items()},
+        }
+
+    @classmethod
+    def from_record(cls, data: RoundRecord) -> RoundResult:
+        return cls(
+            round=int(data["round"]),
+            density=float(data["density"]),
+            epochs=[
+                EpochResult(
+                    epoch=int(e["epoch"]),
+                    train=_metrics(e["train"]),
+                    test=_metrics(e["test"]),
+                    val=None if (val := e.get("val")) is None else _metrics(val),
+                )
+                for e in data["epochs"]
+            ],
+            layers=[LayerSparsity(**layer) for layer in data["layers"]],
+            extra_metrics={k: _metrics(v) for k, v in data["extra_metrics"].items()},
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
@@ -101,6 +146,8 @@ class SearchResult:
         """
         if not self.rounds:
             raise ValueError("no rounds recorded")
+        if tolerance < 0:
+            raise ValueError(f"tolerance must be >= 0, got {tolerance}")
         dense = next((r for r in self.rounds if r.round == 0), None)
         if dense is None:
             raise ValueError("the dense round (round 0) is not in this result")
@@ -152,6 +199,7 @@ class TicketOptions(TypedDict, total=False):
     parameters: ParameterSelector
     rewind: Rewind | str
     rewind_step: int
+    reinit: Callable[[], nn.Module] | None
     checkpoint_dir: str | Path | None
     checkpoint_every: int | None
     callbacks: Sequence[Callback]
@@ -174,6 +222,7 @@ class WinningTicket:
         parameters: ParameterSelector = default_prunable_parameters,
         rewind: Rewind | str = Rewind.WEIGHTS,
         rewind_step: int = 0,
+        reinit: Callable[[], nn.Module] | None = None,
         checkpoint_dir: str | Path | None = None,
         checkpoint_every: int | None = None,
         callbacks: Sequence[Callback] = (),
@@ -182,11 +231,14 @@ class WinningTicket:
             raise ValueError("rewind_step must be >= 0")
         if rewind_step > 0 and Rewind(rewind) is not Rewind.WEIGHTS:
             raise ValueError("rewind_step only applies to rewind='weights'")
+        if reinit is not None and Rewind(rewind) is not Rewind.RANDOM:
+            raise ValueError("reinit only applies to rewind='random'")
         self.model = model
         self.trainer = trainer
         self.strategy: PruningStrategy = strategy or GlobalMagnitudePruning()
         self.rewind = Rewind(rewind)
         self.rewind_step = rewind_step
+        self.reinit = reinit
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir is not None else None
         self.checkpoint_every = checkpoint_every
         self.callbacks = list(callbacks)
@@ -198,19 +250,15 @@ class WinningTicket:
         self.parameters: list[PrunableParameter] = list(parameters(model))
         if not self.parameters:
             raise ValueError("model has no prunable parameters")
-        if self.rewind is Rewind.RANDOM:
-            for module, name in self.parameters:
-                if not callable(getattr(module, "reset_parameters", None)):
-                    raise ValueError(
-                        f"rewind='random' re-draws {type(module).__name__}.{name} with the "
-                        "module's own reset_parameters(), which it does not have"
-                    )
+        if self.rewind is Rewind.RANDOM and reinit is None:
+            _check_resettable(model)
         attach_masks(self.parameters)
         self._rewind_state: StateDict | None = None
         if self.rewind is Rewind.WEIGHTS and rewind_step == 0:
             self._rewind_state = self._snapshot()
         self.rounds_completed = 0
         self.history: list[RoundResult] = []
+        self._warned_full_schedule = False
 
     # ------------------------------------------------------------------ public API
 
@@ -281,7 +329,7 @@ class WinningTicket:
             model=self.model,
             rewind_state=self._rewind_state,
             rounds_completed=self.rounds_completed,
-            history=[_round_to_dict(r) for r in self.history],
+            history=[r.to_record() for r in self.history],
             config=self._config(),
         )
 
@@ -293,9 +341,25 @@ class WinningTicket:
         """
         if map_location is None:
             map_location = next(self.model.parameters()).device
-        checkpoint = load_checkpoint(
-            path, self.model, parameters=lambda _: self.parameters, map_location=map_location
-        )
+        before = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
+        try:
+            checkpoint = load_checkpoint(
+                path, self.model, parameters=lambda _: self.parameters, map_location=map_location
+            )
+            self._check_resumable(checkpoint)
+        except Exception:
+            self.model.load_state_dict(before)  # a rejected checkpoint changes nothing
+            raise
+        self._rewind_state = checkpoint.rewind_state
+        self.rounds_completed = checkpoint.rounds_completed
+        self.history = [RoundResult.from_record(r) for r in checkpoint.history]
+        # So the rounds after a resume draw the same random numbers as an uninterrupted
+        # run would (random re-init, shuffling, dropout).
+        if checkpoint.rng_state is not None:
+            torch.set_rng_state(checkpoint.rng_state.cpu())
+        _restore_cuda_rng(checkpoint.cuda_rng_state)
+
+    def _check_resumable(self, checkpoint: Checkpoint) -> None:
         late_snapshot_pending = self.rewind_step > 0 and checkpoint.rounds_completed == 0
         if (
             self.rewind is Rewind.WEIGHTS
@@ -312,14 +376,6 @@ class WinningTicket:
             )
         if checkpoint.config is not None:
             self._check_config(checkpoint.config)
-        self._rewind_state = checkpoint.rewind_state
-        self.rounds_completed = checkpoint.rounds_completed
-        self.history = [_round_from_dict(r) for r in checkpoint.history]
-        # So the rounds after a resume draw the same random numbers as an uninterrupted
-        # run would (random re-init, shuffling, dropout).
-        if checkpoint.rng_state is not None:
-            torch.set_rng_state(checkpoint.rng_state.cpu())
-        _restore_cuda_rng(checkpoint.cuda_rng_state)
 
     def __call__(self, inputs: torch.Tensor) -> torch.Tensor:
         output: torch.Tensor = self.model(inputs)
@@ -340,7 +396,7 @@ class WinningTicket:
         return {
             "rewind": str(self.rewind),
             "rewind_step": self.rewind_step,
-            "strategy": type(self.strategy).__qualname__,
+            "strategy": _strategy_name(self.strategy),
         }
 
     def _check_config(self, saved: SearchConfig) -> None:
@@ -351,7 +407,8 @@ class WinningTicket:
                 f"rewind_step={saved['rewind_step']}, but this ticket uses "
                 f"rewind='{mine['rewind']}', rewind_step={mine['rewind_step']}"
             )
-        if saved["strategy"] != mine["strategy"]:
+        # 2.2.0 recorded only the class name; accept that for the same class.
+        if saved["strategy"] not in (mine["strategy"], type(self.strategy).__qualname__):
             warnings.warn(
                 f"checkpoint was pruned with {saved['strategy']}, "
                 f"this ticket continues with {mine['strategy']}",
@@ -374,7 +431,11 @@ class WinningTicket:
         try:
             while keep_going():
                 for callback in self.callbacks:
-                    callback.on_round_start(self, self.rounds_completed, epochs)
+                    callback.on_round_start(
+                        self,
+                        self.rounds_completed,
+                        self._epochs_to_train(self.rounds_completed, epochs),
+                    )
                 result = self._train_round(self.rounds_completed, epochs, prune_fraction)
                 for callback in self.callbacks:
                     callback.on_round_end(self, result)
@@ -430,18 +491,44 @@ class WinningTicket:
         if step == self.rewind_step and self._rewind_state is None:
             self._rewind_state = self._snapshot()
 
+    def _start_step(self, round_: int) -> int:
+        """Late rewinding resumes the schedule at the rewind step (Frankle et al. 2020)."""
+        late = self.rewind is Rewind.WEIGHTS and self.rewind_step > 0 and round_ > 0
+        return self.rewind_step if late else 0
+
+    def _epochs_to_train(self, round_: int, epochs: int) -> int:
+        start_step, steps = self._start_step(round_), _steps_per_epoch(self.trainer)
+        if start_step and steps and _fit_accepts(self.trainer, "start_step"):
+            return epochs - start_step // steps
+        return epochs
+
     def _fit(
         self, round_: int, epochs: int, on_step: StepCallback | None = None
     ) -> list[EpochResult]:
         trainer = self.trainer
-        if not (self.callbacks and _reports_epochs(trainer)):
-            return trainer.fit(self.model, epochs, on_step=on_step)
+        start_step = self._start_step(round_)
+        on_epoch = None
+        if self.callbacks:
 
-        def on_epoch(result: EpochResult) -> None:
-            for callback in self.callbacks:
-                callback.on_epoch_end(self, round_, result)
+            def on_epoch(result: EpochResult) -> None:
+                for callback in self.callbacks:
+                    callback.on_epoch_end(self, round_, result)
 
-        return trainer.fit(self.model, epochs, on_step=on_step, on_epoch=on_epoch)
+        if _is_resumable(trainer):
+            return trainer.fit(
+                self.model, epochs, on_step=on_step, on_epoch=on_epoch, start_step=start_step
+            )
+        if start_step and not self._warned_full_schedule:
+            self._warned_full_schedule = True
+            warnings.warn(
+                f"{type(trainer).__name__}.fit takes no start_step, so after rewinding to "
+                f"step {self.rewind_step} each round replays the whole schedule instead of "
+                "resuming at that step as late rewinding (Frankle et al. 2020) does",
+                stacklevel=4,
+            )
+        if on_epoch is not None and _reports_epochs(trainer):
+            return trainer.fit(self.model, epochs, on_step=on_step, on_epoch=on_epoch)
+        return trainer.fit(self.model, epochs, on_step=on_step)
 
     def _fit_capturing_late_snapshot(self, round_: int, epochs: int) -> list[EpochResult]:
         steps = _steps_per_epoch(self.trainer)
@@ -469,6 +556,8 @@ class WinningTicket:
                     state = self.model.state_dict()
                     for key, value in self._rewind_state.items():
                         state[key].copy_(value)
+            case Rewind.RANDOM if self.reinit is not None:
+                self._load_fresh(self.reinit())
             case Rewind.RANDOM:
                 with torch.no_grad():
                     # On a pruned module `weight` is a derived tensor, so reset_parameters()
@@ -479,6 +568,39 @@ class WinningTicket:
                         getattr(module, f"{name}_orig").copy_(getattr(module, name))
             case Rewind.NONE:
                 pass
+
+    def _load_fresh(self, fresh: nn.Module) -> None:
+        """Copy a freshly built model's weights and buffers in, leaving the masks alone."""
+        state = self.model.state_dict()
+        masks = mask_keys(self.model)
+        written: set[str] = set()
+        with torch.no_grad():
+            for key, value in fresh.state_dict().items():
+                target = f"{key}_orig" if f"{key}_orig" in state else key
+                if target not in state or target in masks or state[target].shape != value.shape:
+                    raise ValueError(
+                        f"reinit built a model that does not match this one ({key!r}); "
+                        "it must build the same architecture"
+                    )
+                state[target].copy_(value)
+                written.add(target)
+        missed = {name for name, _ in self.model.named_parameters()} - written
+        if missed:
+            raise ValueError(f"reinit built a model without {sorted(missed)}")
+
+
+def _check_resettable(model: nn.Module) -> None:
+    """Without ``reinit``, random re-initialisation calls each module's reset_parameters(),
+    so every module that owns a parameter needs one."""
+    for name, module in model.named_modules():
+        owns = next(module.parameters(recurse=False), None) is not None
+        if owns and not callable(getattr(module, "reset_parameters", None)):
+            raise ValueError(
+                f"rewind='random' cannot re-draw the parameters of {name or 'the model'} "
+                f"({type(module).__name__}): it has no reset_parameters(). Pass "
+                "reinit=<a function that builds a freshly initialised model>, for example "
+                "reinit=MyModel."
+            )
 
 
 def _restore_cuda_rng(states: list[torch.Tensor] | None) -> None:
@@ -505,15 +627,23 @@ def _steps_per_epoch(trainer: Trainer) -> int | None:
         return None
 
 
-def _reports_epochs(trainer: Trainer) -> TypeGuard[EpochReportingTrainer]:
-    """Whether ``trainer.fit`` takes an ``on_epoch`` callback (it is optional; see Trainer)."""
+def _fit_accepts(trainer: Trainer, *names: str) -> bool:
+    """Whether ``trainer.fit`` takes these optional keywords (see Trainer)."""
     try:
         parameters = inspect.signature(trainer.fit).parameters
     except (TypeError, ValueError):
         return False
-    return "on_epoch" in parameters or any(
-        p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()
-    )
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+        return True
+    return all(name in parameters for name in names)
+
+
+def _reports_epochs(trainer: Trainer) -> TypeGuard[EpochReportingTrainer]:
+    return _fit_accepts(trainer, "on_epoch")
+
+
+def _is_resumable(trainer: Trainer) -> TypeGuard[ResumableTrainer]:
+    return _fit_accepts(trainer, "on_epoch", "start_step")
 
 
 def _describe(result: RoundResult) -> str:
@@ -527,27 +657,6 @@ def _describe(result: RoundResult) -> str:
     return "  ".join(parts)
 
 
-def _round_to_dict(result: RoundResult) -> RoundRecord:
-    return {
-        "round": result.round,
-        "density": result.density,
-        "epochs": [
-            {
-                "epoch": e.epoch,
-                "train": _metrics_record(e.train),
-                "test": _metrics_record(e.test),
-                "val": None if e.val is None else _metrics_record(e.val),
-            }
-            for e in result.epochs
-        ],
-        "layers": [
-            {"name": layer.name, "remaining": layer.remaining, "total": layer.total}
-            for layer in result.layers
-        ],
-        "extra_metrics": {k: _metrics_record(m) for k, m in result.extra_metrics.items()},
-    }
-
-
 def _metrics_record(metrics: Metrics) -> MetricsRecord:
     return {"loss": metrics.loss, "accuracy": metrics.accuracy}
 
@@ -556,19 +665,41 @@ def _metrics(data: MetricsRecord) -> Metrics:
     return Metrics(loss=float(data["loss"]), accuracy=float(data["accuracy"]))
 
 
-def _round_from_dict(data: RoundRecord) -> RoundResult:
-    return RoundResult(
-        round=int(data["round"]),
-        density=float(data["density"]),
-        epochs=[
-            EpochResult(
-                epoch=int(e["epoch"]),
-                train=_metrics(e["train"]),
-                test=_metrics(e["test"]),
-                val=None if (val := e.get("val")) is None else _metrics(val),
-            )
-            for e in data["epochs"]
-        ],
-        layers=[LayerSparsity(**layer) for layer in data["layers"]],
-        extra_metrics={k: _metrics(v) for k, v in data["extra_metrics"].items()},
-    )
+def _strategy_name(strategy: PruningStrategy) -> str:
+    """Dataclass strategies by their repr, which includes their settings; others by class."""
+    if dataclasses.is_dataclass(strategy):
+        return repr(strategy)
+    return type(strategy).__qualname__
+
+
+def train_with_masks(
+    model: nn.Module,
+    masks: StateDict,
+    trainer: Trainer,
+    epochs: int,
+    parameters: ParameterSelector = default_prunable_parameters,
+) -> list[EpochResult]:
+    """Train ``model`` once under ``masks``, from whatever initialisation it has.
+
+    With a freshly built model and a winning ticket's masks (:meth:`WinningTicket.masks`
+    after the round you want), this is Frankle & Carbin's random re-initialisation
+    control: the same sparse structure, new random weights. ``rewind="random"`` is a
+    different experiment, which finds its own masks.
+    """
+    selected = list(parameters(model))
+    attach_masks(selected)
+    state = model.state_dict()
+    if set(masks) != mask_keys(model):
+        raise ValueError(
+            f"masks {sorted(masks)} do not match the model's prunable parameters "
+            f"{sorted(mask_keys(model))}"
+        )
+    with torch.no_grad():
+        for key, mask in masks.items():
+            if state[key].shape != mask.shape:
+                raise ValueError(
+                    f"mask {key!r} has shape {tuple(mask.shape)}, "
+                    f"the model's has {tuple(state[key].shape)}"
+                )
+            state[key].copy_(mask)
+    return trainer.fit(model, epochs)

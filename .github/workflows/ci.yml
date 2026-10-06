@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Each job installs exactly what it needs with `uv sync`. Without this, `uv run` would
+  # re-sync to the default groups and swap the CPU torch for PyPI's CUDA build.
+  UV_NO_SYNC: "1"
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,6 +20,7 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -32,6 +38,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         python: ["3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -39,10 +46,29 @@ jobs:
           enable-cache: true
           python-version: ${{ matrix.python }}
       - run: uv sync --locked --group cpu --extra qat
+      # The QAT tests skip when torchao is missing; make sure here that it is not.
+      - run: uv run python -c "import lottery.qat"
       - run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+
+  test-lowest:
+    # The oldest versions pyproject.toml allows, which the lock file never installs.
+    # On macOS because the lowest resolution picks the plain `torch==2.10.0` from the CPU
+    # index, which only has macOS wheels; Linux ones are published as `2.10.0+cpu`.
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      UV_NO_SYNC: "false" # this job resolves its own environment in `uv run`
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv run --isolated --resolution lowest-direct --group cpu --extra qat python -c "import lottery.qat"
+      - run: uv run --isolated --resolution lowest-direct --group cpu --extra qat pytest -q
 
   test-without-qat:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -53,6 +79,7 @@ jobs:
 
   examples:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -60,16 +87,23 @@ jobs:
           enable-cache: true
       - run: uv sync --locked --group cpu --extra qat --extra vision
       # Random images in the real shapes: exercises each script end to end, no downloads.
-      - run: uv run python examples/mnist_lenet.py --fake-data --limit 120 --rounds 1 --epochs 1
+      - run: uv run python examples/mnist_lenet.py --fake-data --limit 120 --rounds 1 --epochs 1 --control
       - run: uv run python examples/mnist_qat.py --fake-data --limit 120 --rounds 1 --epochs 1
       - run: uv run python examples/cifar10_conv.py --fake-data --limit 120 --rounds 1 --epochs 1 --rewind-step 1
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv build
+      - name: Install the wheel into a clean environment and import it
+        run: |
+          uv venv /tmp/wheel-check
+          uv pip install --python /tmp/wheel-check dist/*.whl \
+            --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          /tmp/wheel-check/bin/python -c "import lottery; print(lottery.__version__)"
       - uses: actions/upload-artifact@v7
         with:
           name: dist
