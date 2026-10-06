@@ -9,7 +9,6 @@ experiment trackers -- is a :class:`Callback` passed to ``WinningTicket(callback
 from __future__ import annotations
 
 import csv
-from collections.abc import Iterable, Mapping
 from contextlib import ExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -18,6 +17,8 @@ from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
+
     from lottery.ticket import RoundResult, WinningTicket
     from lottery.training import EpochResult
 

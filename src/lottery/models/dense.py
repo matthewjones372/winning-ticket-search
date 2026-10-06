@@ -17,4 +17,5 @@ class LeNet300100(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.classifier(x)  # type: ignore[no-any-return]
+        output: torch.Tensor = self.classifier(x)
+        return output

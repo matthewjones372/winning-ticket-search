@@ -195,7 +195,7 @@ They are not extras, so `pip install lottery` uses whatever torch you already ha
 uv sync --group cpu --extra qat --extra vision
 uv run pytest --cov
 uv run ruff check . && uv run ruff format --check .
-uv run mypy src examples
+uv run ty check
 ```
 
 ## Upgrading from 1.x

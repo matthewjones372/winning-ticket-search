@@ -107,9 +107,17 @@ def test_round_start_and_epoch_end_hooks():
 
 
 def test_trainers_without_on_epoch_still_work():
-    class OldTrainer(ShiftTrainer):
+    class OldTrainer:
+        """A 2.0-style trainer: its ``fit`` takes no ``on_epoch``."""
+
+        def __init__(self):
+            self._inner = ShiftTrainer()
+
         def fit(self, model, epochs, on_step=None):
-            return super().fit(model, epochs, on_step)
+            return self._inner.fit(model, epochs, on_step)
+
+        def evaluate(self, model, device=None):
+            return self._inner.evaluate(model, device)
 
     recorder = EpochRecorder()
     ticket = WinningTicket(TinyNet(), OldTrainer(), callbacks=[recorder, ProgressBar()])

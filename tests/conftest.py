@@ -16,6 +16,18 @@ from lottery.training import (
 )
 
 
+def tensor(module: nn.Module, name: str) -> torch.Tensor:
+    """``module.<name>`` as a tensor.
+
+    torch types attributes it cannot see statically as ``Tensor | Module``, which covers
+    the ``weight_orig``/``weight_mask`` pair pruning adds at runtime, and anything reached
+    through ``model[i]`` on a ``Sequential``.
+    """
+    value = getattr(module, name)
+    assert isinstance(value, torch.Tensor), f"{name} is {type(value).__name__}, not a tensor"
+    return value
+
+
 @pytest.fixture(autouse=True)
 def _seed() -> None:
     torch.manual_seed(0)

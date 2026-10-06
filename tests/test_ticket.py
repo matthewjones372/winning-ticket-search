@@ -13,9 +13,10 @@ from lottery import (
     WinningTicket,
     rounds_for_density,
 )
+from lottery.pruning import get_mask
 from lottery.training import EpochResult, Metrics
 
-from .conftest import ShiftTrainer, TinyNet
+from .conftest import ShiftTrainer, TinyNet, tensor
 
 
 def test_round_zero_trains_the_dense_network():
@@ -76,8 +77,8 @@ def test_random_rewind_redraws_weights():
     initial = model.fc1.weight.detach().clone()
     ticket = WinningTicket(model, ShiftTrainer(delta=0.0), rewind=Rewind.RANDOM)
     ticket.search(rounds=1, epochs=1)
-    mask = model.fc1.weight_mask.bool()
-    assert not torch.allclose(model.fc1.weight_orig[mask], initial[mask])
+    mask = get_mask(model.fc1, "weight").bool()
+    assert not torch.allclose(tensor(model.fc1, "weight_orig")[mask], initial[mask])
     assert ticket.density() < 1.0, "masks must survive the re-initialisation"
 
 
@@ -87,7 +88,7 @@ def test_no_rewind_keeps_trained_weights():
     ticket = WinningTicket(model, ShiftTrainer(delta=1.0), rewind="none")
     ticket.search(rounds=1, epochs=1)
     # 3 steps in round 0 + 3 steps in round 1, never reset
-    assert torch.allclose(model.fc1.weight_orig, initial + 6.0)
+    assert torch.allclose(tensor(model.fc1, "weight_orig"), initial + 6.0)
 
 
 def test_search_continues_from_the_previous_call():
@@ -279,7 +280,7 @@ def test_best_tolerance_and_metric_are_configurable():
 
 def test_end_to_end_with_real_training(trainer):
     model = nn.Sequential(nn.Linear(8, 32), nn.ReLU(), nn.Linear(32, 3))
-    initial = model[0].weight.detach().clone()
+    initial = tensor(model[0], "weight").detach().clone()
     ticket = WinningTicket(model, trainer)
     result = ticket.search(rounds=2, epochs=2, prune_fraction=0.5)
 
@@ -335,14 +336,15 @@ def test_random_rewind_redraws_any_parameter_with_its_layers_own_init():
     ticket = WinningTicket(
         model,
         ShiftTrainer(delta=0.0),
-        parameters=lambda m: [(m.fc1, "weight"), (m.fc1, "bias")],
+        parameters=lambda m: [(m.get_submodule("fc1"), "weight"), (m.get_submodule("fc1"), "bias")],
         rewind="random",
     )
     ticket.search(rounds=1, epochs=1, prune_fraction=0.5)
-    alive = model.fc1.bias_mask.bool()
-    assert not torch.allclose(model.fc1.bias_orig[alive], bias_before[alive])
+    alive = get_mask(model.fc1, "bias").bool()
+    bias = tensor(model.fc1, "bias_orig")
+    assert not torch.allclose(bias[alive], bias_before[alive])
     bound = 1 / 8**0.5  # nn.Linear's default bias init for 8 inputs
-    assert model.fc1.bias_orig.abs().max() <= bound
+    assert bias.abs().max() <= bound
 
 
 def test_random_rewind_needs_reset_parameters():
@@ -357,7 +359,10 @@ def test_random_rewind_needs_reset_parameters():
     model = nn.Sequential(Raw())
     with pytest.raises(ValueError, match="reset_parameters"):
         WinningTicket(
-            model, ShiftTrainer(), parameters=lambda m: [(m[0], "weight")], rewind="random"
+            model,
+            ShiftTrainer(),
+            parameters=lambda m: [(m.get_submodule("0"), "weight")],
+            rewind="random",
         )
 
 
@@ -410,3 +415,16 @@ def test_csv_has_validation_columns(tmp_path):
         row = next(csv.DictReader(fh))
     assert row["val_accuracy"] == "0.75"
     assert row["val_loss"] == "0.0"
+
+
+def test_ticket_options_match_the_constructor():
+    import inspect
+
+    from lottery.ticket import TicketOptions
+
+    keyword_only = [
+        name
+        for name, p in inspect.signature(WinningTicket.__init__).parameters.items()
+        if p.kind is inspect.Parameter.KEYWORD_ONLY
+    ]
+    assert keyword_only == list(TicketOptions.__annotations__)

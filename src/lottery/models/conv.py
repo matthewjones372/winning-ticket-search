@@ -34,7 +34,8 @@ class _ConvNet(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.classifier(self.features(x))  # type: ignore[no-any-return]
+        output: torch.Tensor = self.classifier(self.features(x))
+        return output
 
 
 class Conv2(_ConvNet):
