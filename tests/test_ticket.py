@@ -359,3 +359,19 @@ def test_random_rewind_needs_reset_parameters():
         WinningTicket(
             model, ShiftTrainer(), parameters=lambda m: [(m[0], "weight")], rewind="random"
         )
+
+
+def test_masks_and_rewind_state_tell_pruning_masks_from_other_buffers():
+    from .test_pruning import WithMaskBuffer
+
+    ticket = WinningTicket(WithMaskBuffer(), ShiftTrainer())
+    assert set(ticket.masks()) == {"fc.weight_mask"}
+    snapshot = ticket.rewind_state()
+    assert snapshot is not None
+    assert "attention_mask" in snapshot, "a user buffer must be rewound like any other state"
+    assert "fc.weight_mask" not in snapshot
+
+
+def test_masks_of_a_bare_layer():
+    ticket = WinningTicket(nn.Linear(4, 4), ShiftTrainer())
+    assert set(ticket.masks()) == {"weight_mask"}

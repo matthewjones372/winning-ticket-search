@@ -197,3 +197,50 @@ def test_layerwise_pruning_ranks_live_weights_not_the_stale_forward_copy():
     LayerwiseMagnitudePruning().prune(params, 0.5)
 
     assert torch.equal(model[0].weight_mask.flatten(), (torch.arange(100) >= 50).float())
+
+
+class HeadFirst(nn.Module):
+    """Defines its output layer before its body, so definition order is not forward order."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.head = nn.Linear(10, 10, bias=False)
+        self.body = nn.Linear(10, 10, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.head(torch.relu(self.body(x)))
+
+
+def test_layerwise_output_layer_can_be_named():
+    model = HeadFirst()
+    params = default_prunable_parameters(model)
+    attach_masks(params)
+
+    LayerwiseMagnitudePruning(output_layer_scale=0.0, output_layer=model.head).prune(params, 0.4)
+
+    assert int(get_mask(model.head, "weight").sum()) == 100
+    assert int(get_mask(model.body, "weight").sum()) == 60
+
+
+def test_layerwise_output_layer_must_be_selected():
+    model = HeadFirst()
+    strategy = LayerwiseMagnitudePruning(output_layer=nn.Linear(10, 10))
+    with pytest.raises(ValueError, match="output_layer"):
+        strategy.prune(default_prunable_parameters(model), 0.4)
+
+
+class WithMaskBuffer(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fc = nn.Linear(4, 4)
+        self.register_buffer("attention_mask", torch.ones(4))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.fc(x) * self.attention_mask
+
+
+def test_buffers_named_like_masks_are_not_pruning_masks():
+    model = WithMaskBuffer()
+    assert masked_parameters(model) == []
+    attach_masks(default_prunable_parameters(model))
+    assert masked_parameters(model) == [(model.fc, "weight")]

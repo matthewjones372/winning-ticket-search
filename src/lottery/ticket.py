@@ -24,6 +24,7 @@ from lottery.pruning import (
     PruningStrategy,
     attach_masks,
     default_prunable_parameters,
+    mask_keys,
     overall_density,
     sparsity_report,
 )
@@ -229,7 +230,8 @@ class WinningTicket:
 
     def masks(self) -> StateDict:
         """The current pruning masks, keyed by state-dict name."""
-        return {k: v.clone() for k, v in self.model.state_dict().items() if k.endswith("_mask")}
+        keys = mask_keys(self.model)
+        return {k: v.clone() for k, v in self.model.state_dict().items() if k in keys}
 
     def rewind_state(self) -> StateDict | None:
         """The weights survivors are reset to between rounds (``None`` until captured)."""
@@ -376,11 +378,8 @@ class WinningTicket:
         log.debug("saved checkpoint %s", path)
 
     def _snapshot(self) -> StateDict:
-        return {
-            k: v.detach().clone()
-            for k, v in self.model.state_dict().items()
-            if not k.endswith("_mask")
-        }
+        keys = mask_keys(self.model)
+        return {k: v.detach().clone() for k, v in self.model.state_dict().items() if k not in keys}
 
     def _needs_late_snapshot(self) -> bool:
         return self.rewind is Rewind.WEIGHTS and self._rewind_state is None

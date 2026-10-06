@@ -59,6 +59,10 @@ WinningTicket(model, trainer, strategy=GlobalMagnitudePruning())  # default
 WinningTicket(model, trainer, strategy=LayerwiseMagnitudePruning(output_layer_scale=0.5))
 ```
 
+The output layer is the last one selected for pruning, which with the default selector is
+the last one *defined*. If your model defines its head first, name it:
+`LayerwiseMagnitudePruning(output_layer_scale=0.5, output_layer=model.head)`.
+
 By default the weights of every `Linear` and `Conv*d` layer are pruned. Biases and
 normalisation layers are left alone. Pass `parameters=` to pick your own.
 

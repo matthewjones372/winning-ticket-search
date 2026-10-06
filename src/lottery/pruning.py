@@ -8,7 +8,7 @@ gradient automatically, so there is no need to patch gradients during training.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import torch
@@ -42,28 +42,49 @@ def default_prunable_parameters(model: nn.Module) -> list[PrunableParameter]:
 type ParameterSelector = Callable[[nn.Module], Sequence[PrunableParameter]]
 
 
+def is_masked(module: nn.Module, name: str) -> bool:
+    """Whether ``module.<name>`` is re-parametrised by :mod:`torch.nn.utils.prune`.
+
+    Checks for the pruning hook rather than a ``<name>_mask`` attribute, so a model's own
+    buffer that happens to be called, say, ``attention_mask`` is not mistaken for one.
+    """
+    return any(
+        isinstance(hook, prune.BasePruningMethod) and hook._tensor_name == name
+        for hook in module._forward_pre_hooks.values()
+    )
+
+
 def attach_masks(parameters: Sequence[PrunableParameter]) -> None:
     """Attach an all-ones mask to each parameter that does not have one yet."""
     for module, name in parameters:
-        if not hasattr(module, f"{name}_mask"):
+        if not is_masked(module, name):
             prune.identity(module, name)  # type: ignore[no-untyped-call]
 
 
 def remove_masks(parameters: Sequence[PrunableParameter]) -> None:
     """Bake masks into the weights and drop the pruning re-parametrisation."""
     for module, name in parameters:
-        if hasattr(module, f"{name}_mask"):
+        if is_masked(module, name):
             prune.remove(module, name)  # type: ignore[no-untyped-call]
 
 
 def masked_parameters(model: nn.Module) -> list[PrunableParameter]:
     """Every ``(module, name)`` in ``model`` that currently carries a pruning mask."""
     return [
-        (module, buffer[: -len("_mask")])
+        (module, hook._tensor_name)
         for module in model.modules()
-        for buffer, _ in module.named_buffers(recurse=False)
-        if buffer.endswith("_mask")
+        for hook in module._forward_pre_hooks.values()
+        if isinstance(hook, prune.BasePruningMethod)
     ]
+
+
+def mask_keys(model: nn.Module) -> set[str]:
+    """The ``state_dict`` keys of ``model``'s pruning masks, and of nothing else."""
+    prefixes = {id(module): name for name, module in model.named_modules()}
+    return {
+        ".".join(filter(None, (prefixes[id(module)], f"{name}_mask")))
+        for module, name in masked_parameters(model)
+    }
 
 
 def detach_masked_weights(parameters: Sequence[PrunableParameter]) -> None:
@@ -74,15 +95,15 @@ def detach_masked_weights(parameters: Sequence[PrunableParameter]) -> None:
     """
     with torch.no_grad():
         for module, name in parameters:
-            mask = getattr(module, f"{name}_mask", None)
-            if mask is not None:
+            if is_masked(module, name):
+                mask = getattr(module, f"{name}_mask")
                 setattr(module, name, getattr(module, f"{name}_orig") * mask)
 
 
 def get_mask(module: nn.Module, name: str) -> torch.Tensor:
-    mask: torch.Tensor | None = getattr(module, f"{name}_mask", None)
-    if mask is None:
+    if not is_masked(module, name):
         return torch.ones_like(getattr(module, name))
+    mask: torch.Tensor = getattr(module, f"{name}_mask")
     return mask
 
 
@@ -116,20 +137,28 @@ class GlobalMagnitudePruning:
 class LayerwiseMagnitudePruning:
     """Remove the smallest-magnitude weights within each layer independently.
 
-    ``output_layer_scale`` multiplies the fraction for the final parameter. Frankle &
-    Carbin prune the output layer of their fully-connected networks at half the rate
-    (``output_layer_scale=0.5``).
+    ``output_layer_scale`` multiplies the fraction for the output layer. Frankle & Carbin
+    prune the output layer of their fully-connected networks at half the rate
+    (``output_layer_scale=0.5``). The output layer is ``output_layer`` if given, otherwise
+    the last selected parameter -- the last one *defined*, with the default selector, which
+    is not the output layer for a model that defines its head before its body.
     """
 
     output_layer_scale: float = 1.0
+    output_layer: nn.Module | None = field(default=None, repr=False)
 
     def prune(self, parameters: Sequence[PrunableParameter], fraction: float) -> None:
         _check_fraction(fraction)
         if not 0.0 <= self.output_layer_scale <= 1.0:
             raise ValueError("output_layer_scale must be in [0, 1]")
-        last = len(parameters) - 1
-        for index, (module, name) in enumerate(parameters):
-            amount = fraction * self.output_layer_scale if index == last else fraction
+        if self.output_layer is None:
+            is_output = [i == len(parameters) - 1 for i in range(len(parameters))]
+        else:
+            is_output = [module is self.output_layer for module, _ in parameters]
+            if not any(is_output):
+                raise ValueError("output_layer is not among the parameters being pruned")
+        for (module, name), output in zip(parameters, is_output, strict=True):
+            amount = fraction * self.output_layer_scale if output else fraction
             if amount > 0:
                 prune.l1_unstructured(  # type: ignore[no-untyped-call]
                     module, name, amount=amount, importance_scores=_live_weights(module, name)
