@@ -213,6 +213,7 @@ def test_checkpoints_written_every_n_rounds(tmp_path):
     [
         ({"rewind_step": -1}, "rewind_step"),
         ({"checkpoint_every": 1}, "checkpoint_dir"),
+        ({"checkpoint_every": 0, "checkpoint_dir": "x"}, "checkpoint_every"),
         ({"rewind": "sideways"}, "sideways"),
         ({"rewind": "random", "rewind_step": 3}, "only applies"),
     ],
@@ -271,3 +272,41 @@ def test_end_to_end_with_real_training(trainer):
     snapshot = ticket.rewind_state()
     assert snapshot is not None
     assert torch.equal(snapshot["0.weight_orig"], initial)
+
+
+@pytest.mark.parametrize("fraction", [0.0, 1.0, 20])
+def test_bad_prune_fraction_rejected_before_any_training(fraction):
+    trainer = ShiftTrainer()
+    ticket = WinningTicket(TinyNet(), trainer)
+    with pytest.raises(ValueError, match="prune_fraction"):
+        ticket.search(rounds=2, epochs=1, prune_fraction=fraction)
+    assert trainer.fit_calls == []
+    assert ticket.rounds_completed == 0
+
+
+def test_unreachable_rewind_step_rejected_before_training(trainer, classification_data):
+    def fit(*args, **kwargs):
+        raise AssertionError("trained before checking rewind_step")
+
+    trainer.fit = fit
+    steps = 2 * len(classification_data)
+    ticket = WinningTicket(TinyNet(), trainer, rewind_step=steps + 1)
+    with pytest.raises(ValueError, match=f"only {steps} steps"):
+        ticket.search(rounds=1, epochs=2)
+
+
+def test_final_round_of_each_search_is_checkpointed(tmp_path):
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(), checkpoint_dir=tmp_path, checkpoint_every=2)
+    ticket.search(rounds=3, epochs=1)
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "round_000.pt",
+        "round_002.pt",
+        "round_003.pt",
+    ]
+
+
+def test_checkpoint_dir_alone_saves_the_end_of_each_search(tmp_path):
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(), checkpoint_dir=tmp_path)
+    ticket.search(rounds=2, epochs=1)
+    ticket.search_to_density(0.5, epochs=1)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["round_002.pt", "round_004.pt"]

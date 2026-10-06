@@ -133,6 +133,8 @@ class WinningTicket:
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir is not None else None
         self.checkpoint_every = checkpoint_every
         self.callbacks = list(callbacks)
+        if checkpoint_every is not None and checkpoint_every < 1:
+            raise ValueError("checkpoint_every must be >= 1")
         if checkpoint_every is not None and self.checkpoint_dir is None:
             raise ValueError("checkpoint_every requires checkpoint_dir")
 
@@ -262,6 +264,10 @@ class WinningTicket:
         expected_rounds: int | None,
         keep_going: Callable[[], bool],
     ) -> SearchResult:
+        # Checked here rather than by the strategy, which only sees it after round 0 trained.
+        if not 0.0 < prune_fraction < 1.0:
+            raise ValueError(f"prune_fraction must be in (0, 1), got {prune_fraction}")
+        start = self.rounds_completed
         for callback in self.callbacks:
             callback.on_search_start(self, expected_rounds)
         try:
@@ -272,6 +278,9 @@ class WinningTicket:
         finally:
             for callback in self.callbacks:
                 callback.on_search_end(self)
+        last = self.rounds_completed - 1
+        if self.checkpoint_dir is not None and last >= start and not self._checkpoint_due(last):
+            self._checkpoint(last)
         return SearchResult(list(self.history))
 
     def _train_round(self, round_: int, epochs: int, prune_fraction: float) -> RoundResult:
@@ -295,10 +304,17 @@ class WinningTicket:
         self.history.append(result)
         self.rounds_completed = round_ + 1
         log.info("%s", _describe(result))
-        if self.checkpoint_every and round_ % self.checkpoint_every == 0:
-            path = self.save(self._checkpoint_path(round_))
-            log.debug("saved checkpoint %s", path)
+        if self._checkpoint_due(round_):
+            self._checkpoint(round_)
         return result
+
+    def _checkpoint_due(self, round_: int) -> bool:
+        return self.checkpoint_every is not None and round_ % self.checkpoint_every == 0
+
+    def _checkpoint(self, round_: int) -> None:
+        assert self.checkpoint_dir is not None
+        path = self.save(self.checkpoint_dir / f"round_{round_:03d}.pt")
+        log.debug("saved checkpoint %s", path)
 
     def _snapshot(self) -> StateDict:
         return {
@@ -315,6 +331,12 @@ class WinningTicket:
             self._rewind_state = self._snapshot()
 
     def _fit_capturing_late_snapshot(self, epochs: int) -> list[EpochResult]:
+        steps = _steps_per_epoch(self.trainer)
+        if steps is not None and steps * epochs < self.rewind_step:
+            raise ValueError(
+                f"rewind_step={self.rewind_step} is never reached: the dense round trains "
+                f"only {steps * epochs} steps ({epochs} epochs of {steps})"
+            )
         initial = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
         results = self.trainer.fit(self.model, epochs, on_step=self._capture_rewind)
         if self._rewind_state is None:
@@ -345,9 +367,13 @@ class WinningTicket:
             case Rewind.NONE:
                 pass
 
-    def _checkpoint_path(self, round_: int) -> Path:
-        assert self.checkpoint_dir is not None
-        return self.checkpoint_dir / f"round_{round_:03d}.pt"
+
+def _steps_per_epoch(trainer: Trainer) -> int | None:
+    """Optimiser steps per epoch, if the trainer has a sized ``train_loader``."""
+    try:
+        return len(trainer.train_loader)  # type: ignore[attr-defined]
+    except (AttributeError, TypeError):
+        return None
 
 
 def _describe(result: RoundResult) -> str:

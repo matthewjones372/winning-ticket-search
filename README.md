@@ -97,9 +97,7 @@ Progress bars and files are callbacks:
 ```python
 from lottery import CsvLogger, ProgressBar
 
-ticket = WinningTicket(
-    model, trainer, callbacks=[ProgressBar(), CsvLogger("results/run")]
-)
+ticket = WinningTicket(model, trainer, callbacks=[ProgressBar(), CsvLogger("results/run")])
 ```
 
 `ProgressBar` routes log lines above the bar while it is open. `CsvLogger` writes
@@ -112,8 +110,7 @@ from lottery import Callback
 
 
 class MyTracker(Callback):
-    def on_round_end(self, ticket, result):
-        ...  # result is a RoundResult
+    def on_round_end(self, ticket, result): ...  # result is a RoundResult
 
     def on_search_end(self, ticket):  # also called if a round raises
         ...
@@ -130,6 +127,8 @@ resumed.load("ticket.pt")
 resumed.search(rounds=5, epochs=5)  # carries on pruning
 ```
 
+With `checkpoint_dir` set, the last round of every `search` call is saved too, and
+`checkpoint_every=n` also saves every *n*th round along the way.
 Checkpoints are plain `state_dict`s plus the round history, and load with
 `torch.load(weights_only=True)`. A `CsvLogger` pointed at the directory of a resumed
 run keeps the rows for the rounds already in the checkpoint and drops any after it.
