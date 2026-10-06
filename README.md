@@ -250,11 +250,16 @@ resumed.search(rounds=5, epochs=5)  # carries on pruning
 With `checkpoint_dir` set, the last round of every `search` call is saved too, and
 `checkpoint_every=n` also saves every *n*th round along the way.
 Checkpoints are plain `state_dict`s plus the round history, and load with
-`torch.load(weights_only=True)`. They also record the rewind settings, which must match
-on resume, the pruning strategy (a mismatch warns) and the CPU RNG state, which `load`
-restores so a resumed `rewind="random"` search draws the same weights. A `CsvLogger`
-pointed at the directory of a resumed run keeps the rows for the rounds already in the
-checkpoint and drops any after it.
+`torch.load(weights_only=True)`. They also record:
+
+- the rewind settings, which must match on resume
+- the pruning strategy (a mismatch warns)
+- the CPU and CUDA RNG states, which `load` restores so a resumed run draws the same
+  random numbers as an uninterrupted one. The CUDA state is only restored onto the same
+  number of GPUs; otherwise `load` warns and leaves it.
+
+A `CsvLogger` pointed at the directory of a resumed run keeps the rows for the rounds
+already in the checkpoint and drops any after it.
 
 ## Examples
 

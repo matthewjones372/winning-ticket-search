@@ -175,3 +175,38 @@ def test_version_1_checkpoints_still_load(tmp_path):
     resumed = WinningTicket(TinyNet(), ShiftTrainer())
     resumed.load(path)
     assert resumed.rounds_completed == 2
+
+
+def _fake_gpus(monkeypatch, count: int, restored: list) -> None:
+    states = [torch.full((4,), i, dtype=torch.uint8) for i in range(count)]
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: count)
+    monkeypatch.setattr(torch.cuda, "get_rng_state_all", lambda: states)
+    monkeypatch.setattr(torch.cuda, "set_rng_state_all", restored.extend)
+
+
+def test_cuda_rng_state_is_saved_and_restored(tmp_path, monkeypatch):
+    restored: list = []
+    _fake_gpus(monkeypatch, 2, restored)
+    path = WinningTicket(TinyNet(), ShiftTrainer()).save(tmp_path / "t.pt")
+    assert len(torch.load(path, weights_only=True)["cuda_rng_state"]) == 2
+
+    WinningTicket(TinyNet(), ShiftTrainer()).load(path)
+    assert [int(s[0]) for s in restored] == [0, 1]
+
+
+def test_cuda_rng_state_from_a_different_gpu_count_is_not_restored(tmp_path, monkeypatch):
+    restored: list = []
+    _fake_gpus(monkeypatch, 2, restored)
+    path = WinningTicket(TinyNet(), ShiftTrainer()).save(tmp_path / "t.pt")
+
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
+    with pytest.warns(UserWarning, match="2 GPUs"):
+        WinningTicket(TinyNet(), ShiftTrainer()).load(path)
+    assert restored == []
+
+
+def test_no_cuda_rng_state_without_cuda(tmp_path, monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    path = WinningTicket(TinyNet(), ShiftTrainer()).save(tmp_path / "t.pt")
+    assert torch.load(path, weights_only=True)["cuda_rng_state"] is None

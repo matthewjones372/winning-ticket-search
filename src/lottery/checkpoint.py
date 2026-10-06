@@ -2,7 +2,7 @@
 
 A checkpoint stores the pruned model's state (``*_orig`` weights plus ``*_mask``
 buffers), the rewind snapshot, the number of completed rounds, the round history, the
-search settings that must match on resume and the CPU RNG state. Everything is a tensor
+search settings that must match on resume and the CPU and CUDA RNG states. Everything is a tensor
 or a primitive, so it loads with ``torch.load(weights_only=True)``.
 """
 
@@ -67,6 +67,9 @@ class Checkpoint:
     """The search settings it was saved with; ``None`` for version 1 checkpoints."""
     rng_state: torch.Tensor | None = None
     """``torch.get_rng_state()`` at save time; ``None`` for version 1 checkpoints."""
+    cuda_rng_state: list[torch.Tensor] | None = None
+    """``torch.cuda.get_rng_state_all()`` at save time, one per GPU; ``None`` if saved
+    without CUDA."""
 
 
 def save_checkpoint(
@@ -89,6 +92,7 @@ def save_checkpoint(
             "history": history or [],
             "config": config,
             "rng_state": torch.get_rng_state(),
+            "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
         },
         path,
     )
@@ -115,4 +119,5 @@ def load_checkpoint(
         history=list(payload.get("history", [])),
         config=payload.get("config"),
         rng_state=payload.get("rng_state"),
+        cuda_rng_state=payload.get("cuda_rng_state"),
     )
