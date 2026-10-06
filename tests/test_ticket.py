@@ -428,3 +428,65 @@ def test_ticket_options_match_the_constructor():
         if p.kind is inspect.Parameter.KEYWORD_ONLY
     ]
     assert keyword_only == list(TicketOptions.__annotations__)
+
+
+class Attention(nn.Module):
+    """Parameters whose modules have no public reset_parameters(): MultiheadAttention's
+    in-projection, and a raw positional embedding."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.attn = nn.MultiheadAttention(8, 2, batch_first=True)
+        self.pos = nn.Parameter(torch.zeros(4, 8))
+        self.fc = nn.Linear(8, 3)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = x + self.pos
+        return self.fc(self.attn(h, h, h)[0].mean(1))
+
+
+def _fc_only(m: nn.Module) -> list[tuple[nn.Module, str]]:
+    return [(m.get_submodule("fc"), "weight")]
+
+
+def test_random_rewind_refuses_parameters_it_cannot_redraw():
+    """Regression: they used to keep their trained values in the 'random' control."""
+    with pytest.raises(ValueError, match="reinit"):
+        WinningTicket(Attention(), ShiftTrainer(), parameters=_fc_only, rewind="random")
+
+
+def test_random_rewind_with_reinit_redraws_every_parameter():
+    model = Attention()
+    trained_once = None
+
+    class Spy(ShiftTrainer):
+        def fit(self, model, epochs, on_step=None, on_epoch=None):
+            nonlocal trained_once
+            results = super().fit(model, epochs, on_step, on_epoch)
+            if trained_once is None:
+                trained_once = tensor(model.attn, "in_proj_weight").detach().clone()
+            return results
+
+    ticket = WinningTicket(
+        model, Spy(delta=1.0), parameters=_fc_only, rewind="random", reinit=Attention
+    )
+    ticket.search(rounds=1, epochs=1)
+
+    # The factory's pos is zeros, and each round trains it by +1 for 3 steps.
+    assert torch.equal(tensor(model, "pos"), torch.full((4, 8), 3.0))
+    assert trained_once is not None
+    assert not torch.allclose(tensor(model.attn, "in_proj_weight"), trained_once + 3.0)
+    assert ticket.density() < 1.0, "masks survive the redraw"
+
+
+def test_reinit_must_match_the_architecture():
+    ticket = WinningTicket(
+        Attention(), ShiftTrainer(), parameters=_fc_only, rewind="random", reinit=TinyNet
+    )
+    with pytest.raises(ValueError, match="reinit"):
+        ticket.search(rounds=1, epochs=1)
+
+
+def test_reinit_only_applies_to_random_rewind():
+    with pytest.raises(ValueError, match="reinit"):
+        WinningTicket(TinyNet(), ShiftTrainer(), reinit=TinyNet)

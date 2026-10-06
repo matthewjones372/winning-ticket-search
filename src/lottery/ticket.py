@@ -57,7 +57,10 @@ class Rewind(StrEnum):
     """Reset to the snapshot taken at ``rewind_step`` (step 0 is the original init).
     This is the lottery ticket procedure."""
     RANDOM = "random"
-    """Re-draw a fresh random initialisation. The random-reinit control experiment."""
+    """Re-draw a fresh random initialisation every round: IMP with random re-initialisation.
+    This is not quite Frankle & Carbin's control, which trains a *winning ticket's* masks
+    once from a fresh initialisation; use :func:`train_with_masks` for that. Pass
+    ``reinit=`` to draw from the model's own initialisation."""
     NONE = "none"
     """Keep the trained weights and retrain with a fresh optimiser and schedule
     (learning-rate rewinding, Renda et al. 2020)."""
@@ -152,6 +155,7 @@ class TicketOptions(TypedDict, total=False):
     parameters: ParameterSelector
     rewind: Rewind | str
     rewind_step: int
+    reinit: Callable[[], nn.Module] | None
     checkpoint_dir: str | Path | None
     checkpoint_every: int | None
     callbacks: Sequence[Callback]
@@ -174,6 +178,7 @@ class WinningTicket:
         parameters: ParameterSelector = default_prunable_parameters,
         rewind: Rewind | str = Rewind.WEIGHTS,
         rewind_step: int = 0,
+        reinit: Callable[[], nn.Module] | None = None,
         checkpoint_dir: str | Path | None = None,
         checkpoint_every: int | None = None,
         callbacks: Sequence[Callback] = (),
@@ -182,11 +187,14 @@ class WinningTicket:
             raise ValueError("rewind_step must be >= 0")
         if rewind_step > 0 and Rewind(rewind) is not Rewind.WEIGHTS:
             raise ValueError("rewind_step only applies to rewind='weights'")
+        if reinit is not None and Rewind(rewind) is not Rewind.RANDOM:
+            raise ValueError("reinit only applies to rewind='random'")
         self.model = model
         self.trainer = trainer
         self.strategy: PruningStrategy = strategy or GlobalMagnitudePruning()
         self.rewind = Rewind(rewind)
         self.rewind_step = rewind_step
+        self.reinit = reinit
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir is not None else None
         self.checkpoint_every = checkpoint_every
         self.callbacks = list(callbacks)
@@ -198,13 +206,8 @@ class WinningTicket:
         self.parameters: list[PrunableParameter] = list(parameters(model))
         if not self.parameters:
             raise ValueError("model has no prunable parameters")
-        if self.rewind is Rewind.RANDOM:
-            for module, name in self.parameters:
-                if not callable(getattr(module, "reset_parameters", None)):
-                    raise ValueError(
-                        f"rewind='random' re-draws {type(module).__name__}.{name} with the "
-                        "module's own reset_parameters(), which it does not have"
-                    )
+        if self.rewind is Rewind.RANDOM and reinit is None:
+            _check_resettable(model)
         attach_masks(self.parameters)
         self._rewind_state: StateDict | None = None
         if self.rewind is Rewind.WEIGHTS and rewind_step == 0:
@@ -469,6 +472,8 @@ class WinningTicket:
                     state = self.model.state_dict()
                     for key, value in self._rewind_state.items():
                         state[key].copy_(value)
+            case Rewind.RANDOM if self.reinit is not None:
+                self._load_fresh(self.reinit())
             case Rewind.RANDOM:
                 with torch.no_grad():
                     # On a pruned module `weight` is a derived tensor, so reset_parameters()
@@ -479,6 +484,39 @@ class WinningTicket:
                         getattr(module, f"{name}_orig").copy_(getattr(module, name))
             case Rewind.NONE:
                 pass
+
+    def _load_fresh(self, fresh: nn.Module) -> None:
+        """Copy a freshly built model's weights and buffers in, leaving the masks alone."""
+        state = self.model.state_dict()
+        masks = mask_keys(self.model)
+        written: set[str] = set()
+        with torch.no_grad():
+            for key, value in fresh.state_dict().items():
+                target = f"{key}_orig" if f"{key}_orig" in state else key
+                if target not in state or target in masks or state[target].shape != value.shape:
+                    raise ValueError(
+                        f"reinit built a model that does not match this one ({key!r}); "
+                        "it must build the same architecture"
+                    )
+                state[target].copy_(value)
+                written.add(target)
+        missed = {name for name, _ in self.model.named_parameters()} - written
+        if missed:
+            raise ValueError(f"reinit built a model without {sorted(missed)}")
+
+
+def _check_resettable(model: nn.Module) -> None:
+    """Without ``reinit``, random re-initialisation calls each module's reset_parameters(),
+    so every module that owns a parameter needs one."""
+    for name, module in model.named_modules():
+        owns = next(module.parameters(recurse=False), None) is not None
+        if owns and not callable(getattr(module, "reset_parameters", None)):
+            raise ValueError(
+                f"rewind='random' cannot re-draw the parameters of {name or 'the model'} "
+                f"({type(module).__name__}): it has no reset_parameters(). Pass "
+                "reinit=<a function that builds a freshly initialised model>, for example "
+                "reinit=MyModel."
+            )
 
 
 def _restore_cuda_rng(states: list[torch.Tensor] | None) -> None:
