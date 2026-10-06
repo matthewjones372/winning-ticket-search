@@ -52,7 +52,9 @@ jobs:
 
   test-lowest:
     # The oldest versions pyproject.toml allows, which the lock file never installs.
-    runs-on: ubuntu-latest
+    # On macOS because the lowest resolution picks the plain `torch==2.10.0` from the CPU
+    # index, which only has macOS wheels; Linux ones are published as `2.10.0+cpu`.
+    runs-on: macos-latest
     timeout-minutes: 20
     env:
       UV_NO_SYNC: "false" # this job resolves its own environment in `uv run`
