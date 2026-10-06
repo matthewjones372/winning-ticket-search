@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable, Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Any, Protocol
 
 import torch
@@ -23,6 +24,9 @@ type StepCallback = Callable[[int, nn.Module], None]
 type EpochCallback = Callable[[EpochResult], None]
 """Called after every epoch, once its metrics are known."""
 type OptimiserFactory = Callable[[Iterable[nn.Parameter]], Optimizer]
+"""Builds the optimiser for one round's parameters. Any torch optimiser works through
+``functools.partial``, e.g. ``partial(torch.optim.AdamW, lr=3e-4)``; :func:`sgd` and
+:func:`adam` are shorthands with the defaults Frankle & Carbin used."""
 type SchedulerFactory = Callable[[Optimizer, int], LRScheduler]
 """Given the optimiser and the number of epochs in the round, build a per-epoch scheduler."""
 
@@ -70,17 +74,13 @@ class EpochReportingTrainer(Trainer, Protocol):
 
 
 def sgd(lr: float = 0.01, momentum: float = 0.9, weight_decay: float = 5e-4) -> OptimiserFactory:
-    def factory(params: Iterable[nn.Parameter]) -> Optimizer:
-        return torch.optim.SGD(params, lr=lr, momentum=momentum, weight_decay=weight_decay)
-
-    return factory
+    """``torch.optim.SGD`` with these settings. Shorthand for ``functools.partial``."""
+    return partial(torch.optim.SGD, lr=lr, momentum=momentum, weight_decay=weight_decay)
 
 
 def adam(lr: float = 1e-3, weight_decay: float = 0.0) -> OptimiserFactory:
-    def factory(params: Iterable[nn.Parameter]) -> Optimizer:
-        return torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
-
-    return factory
+    """``torch.optim.Adam`` with these settings. Shorthand for ``functools.partial``."""
+    return partial(torch.optim.Adam, lr=lr, weight_decay=weight_decay)
 
 
 def cosine_annealing(optimiser: Optimizer, epochs: int) -> LRScheduler:
