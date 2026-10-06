@@ -262,6 +262,10 @@ dependencies = [
 
 [package.optional-dependencies]
 qat = [
+    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and sys_platform != 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "(sys_platform == 'linux' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
     { name = "torchao" },
 ]
 vision = [
@@ -295,6 +299,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "torch", specifier = ">=2.9" },
+    { name = "torch", marker = "extra == 'qat'", specifier = ">=2.10" },
     { name = "torchao", marker = "extra == 'qat'", specifier = ">=0.18" },
     { name = "torchvision", marker = "extra == 'vision'", specifier = ">=0.24" },
     { name = "tqdm", specifier = ">=4.66" },

@@ -1,6 +1,6 @@
 """Quantisation-aware training (QAT) on top of the lottery ticket search, using torchao.
 
-Requires the ``qat`` extra: ``uv add 'lottery[qat]'``.
+Requires the ``qat`` extra, which installs torchao.
 
 Linear layers are swapped for torchao's ``FakeQuantizedLinear`` *before* pruning masks
 are attached, so training sees both the sparsity mask and simulated quantisation. At
@@ -31,7 +31,7 @@ try:
     from torchao.quantization.quant_api import quantize_
 except ImportError as exc:  # pragma: no cover - exercised only without the extra
     raise ImportError(
-        "lottery.qat needs torchao. Install the extra with `uv add 'lottery[qat]'`."
+        "lottery.qat needs torchao: install lottery with its qat extra, or add torchao."
     ) from exc
 
 if TYPE_CHECKING:
