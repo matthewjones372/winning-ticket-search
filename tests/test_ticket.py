@@ -116,6 +116,28 @@ def test_rounds_for_density_validation(density, fraction):
         rounds_for_density(density, fraction)
 
 
+def test_search_to_density_reaches_target_with_uneven_strategy():
+    """Layerwise pruning with a slower output layer shrinks density by less than (1 - p)."""
+    ticket = WinningTicket(
+        TinyNet(),
+        ShiftTrainer(),
+        strategy=LayerwiseMagnitudePruning(output_layer_scale=0.5),
+        progress=False,
+    )
+    ticket.search_to_density(0.3, epochs=1, prune_fraction=0.2)
+    assert ticket.density() <= 0.3
+
+
+def test_search_to_density_fails_when_no_progress():
+    class NoOp:
+        def prune(self, parameters, fraction):
+            pass
+
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(), strategy=NoOp(), progress=False)
+    with pytest.raises(RuntimeError, match="no weights"):
+        ticket.search_to_density(0.5, epochs=1)
+
+
 def test_search_to_density_stops_at_target():
     ticket = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
     ticket.search_to_density(0.5, epochs=1, prune_fraction=0.2)
@@ -195,6 +217,7 @@ def test_checkpoints_written_every_n_rounds(tmp_path):
         ({"rewind_step": -1}, "rewind_step"),
         ({"checkpoint_every": 1}, "output_dir"),
         ({"rewind": "sideways"}, "sideways"),
+        ({"rewind": "random", "rewind_step": 3}, "only applies"),
     ],
 )
 def test_constructor_validation(kwargs, match):
@@ -232,6 +255,9 @@ def test_best_round_is_sparsest_within_tolerance_of_dense():
 def test_best_edge_cases():
     with pytest.raises(ValueError, match="no rounds"):
         SearchResult([]).best()
+    with pytest.raises(ValueError, match="dense round"):
+        SearchResult([_round(3, 0.5, 0.9)]).best()
+    assert SearchResult([_round(0, 1.0, float("nan")), _round(1, 0.8, 0.5)]).best().round == 0
     assert SearchResult([_round(0, 1.0, None)]).best().round == 0
     assert _round(0, 1.0, None).final_test is None
 

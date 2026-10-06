@@ -79,3 +79,15 @@ def test_qat_ticket_with_real_trainer(trainer, tmp_path):
     assert abs(quantised.accuracy - fake.accuracy) < 0.1
     assert (tmp_path / "extra.csv").read_text().count("quantised") == 2
     assert copy.deepcopy(ticket.quantised_model()) is not None
+
+
+def test_quantised_model_with_custom_parameter_selector():
+    ticket = QatWinningTicket(
+        TinyNet(),
+        ShiftTrainer(delta=0.0),
+        parameters=lambda m: [(m.fc2, "weight")],
+        progress=False,
+    )
+    ticket.search(rounds=1, epochs=1, prune_fraction=0.5)
+    quantised = ticket.quantised_model()
+    assert int((quantised.fc2.weight.qdata == 0).sum()) >= 24

@@ -7,8 +7,9 @@ tensor or a primitive, so it loads with ``torch.load(weights_only=True)``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import torch
 from torch import nn
@@ -22,6 +23,7 @@ FORMAT_VERSION = 1
 class Checkpoint:
     rounds_completed: int
     rewind_state: dict[str, torch.Tensor] | None
+    history: list[dict[str, Any]] = field(default_factory=list)
 
 
 def save_checkpoint(
@@ -30,6 +32,7 @@ def save_checkpoint(
     model: nn.Module,
     rewind_state: dict[str, torch.Tensor] | None,
     rounds_completed: int,
+    history: list[dict[str, Any]] | None = None,
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,6 +42,7 @@ def save_checkpoint(
             "model": model.state_dict(),
             "rewind_state": rewind_state,
             "rounds_completed": rounds_completed,
+            "history": history or [],
         },
         path,
     )
@@ -62,4 +66,5 @@ def load_checkpoint(
     return Checkpoint(
         rounds_completed=int(payload["rounds_completed"]),
         rewind_state=payload["rewind_state"],
+        history=list(payload.get("history", [])),
     )

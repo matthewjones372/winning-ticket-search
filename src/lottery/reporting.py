@@ -26,11 +26,11 @@ EXTRA_FIELDS = ["round", "name", "loss", "accuracy"]
 class CsvReporter:
     """Appends one round at a time to ``metrics.csv``, ``layers.csv`` and ``extra.csv``.
 
-    Files are truncated when the reporter is created, so a new search does not mix
-    rows with a previous run in the same directory.
+    On creation, rows for rounds ``>= keep_rounds_below`` are dropped, so a fresh search
+    (``0``) starts with empty files and a resumed one keeps the history before it.
     """
 
-    def __init__(self, directory: str | Path) -> None:
+    def __init__(self, directory: str | Path, keep_rounds_below: int = 0) -> None:
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.metrics_path = self.directory / "metrics.csv"
@@ -41,8 +41,14 @@ class CsvReporter:
             (self.layers_path, LAYER_FIELDS),
             (self.extra_path, EXTRA_FIELDS),
         ):
+            kept: list[dict[str, str]] = []
+            if keep_rounds_below > 0 and path.exists():
+                with path.open(newline="", encoding="utf-8") as fh:
+                    kept = [r for r in csv.DictReader(fh) if int(r["round"]) < keep_rounds_below]
             with path.open("w", newline="", encoding="utf-8") as fh:
-                csv.DictWriter(fh, fieldnames=fields).writeheader()
+                writer = csv.DictWriter(fh, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(kept)
 
     def write_round(self, result: RoundResult) -> None:
         self._append(

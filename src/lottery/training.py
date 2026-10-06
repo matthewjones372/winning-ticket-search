@@ -140,6 +140,7 @@ class ClassificationTrainer:
     @torch.inference_mode()
     def evaluate(self, model: nn.Module, device: torch.device | None = None) -> Metrics:
         device = device or self.device
+        model.to(device)
         model.eval()
         acc = _Accumulator()
         for inputs, targets in self.test_loader:

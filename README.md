@@ -75,7 +75,8 @@ int8_model = ticket.quantised_model()
 ```
 
 Any base config torchao's `QATConfig` accepts can be passed as `base_config=`, for
-example `Int4WeightOnlyConfig` for GPU inference.
+example `Int4WeightOnlyConfig` for GPU inference. Symmetric weight schemes (the default)
+keep pruned weights exactly zero after conversion; asymmetric ones may not.
 
 ### Checkpoints
 
@@ -88,7 +89,9 @@ resumed.load("ticket.pt")
 resumed.search(rounds=5, epochs=5)  # carries on pruning
 ```
 
-Checkpoints are plain `state_dict`s and load with `torch.load(weights_only=True)`.
+Checkpoints are plain `state_dict`s plus the round history, and load with
+`torch.load(weights_only=True)`. Resuming into the same `output_dir` keeps the CSV rows
+for the rounds already in the checkpoint.
 
 ## Examples
 

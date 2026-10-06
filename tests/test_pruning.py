@@ -9,6 +9,7 @@ from lottery.pruning import (
     attach_masks,
     default_prunable_parameters,
     get_mask,
+    masked_parameters,
     overall_density,
     remove_masks,
     sparsity_report,
@@ -162,3 +163,25 @@ def test_sparsity_report_counts_each_layer_separately():
 def test_density_of_empty_report():
     assert overall_density([]) == 0.0
     assert LayerSparsity("x", 0, 0).density == 0.0
+
+
+def test_global_pruning_ranks_live_weights_not_the_stale_forward_copy():
+    """`module.weight` is only refreshed by a forward pass; ranking must use weight_orig."""
+    model = nn.Sequential(nn.Linear(10, 10, bias=False), nn.Linear(10, 10, bias=False))
+    params = default_prunable_parameters(model)
+    attach_masks(params)
+    with torch.no_grad():  # simulate training that never runs another forward
+        model[0].weight_orig.fill_(0.01)
+        model[1].weight_orig.fill_(1.0)
+
+    GlobalMagnitudePruning().prune(params, 0.5)
+
+    assert int(model[0].weight_mask.sum()) == 0
+    assert int(model[1].weight_mask.sum()) == 100
+
+
+def test_masked_parameters_finds_every_mask():
+    model = nn.Sequential(nn.Linear(3, 3), nn.Linear(3, 3))
+    assert masked_parameters(model) == []
+    attach_masks([(model[1], "weight")])
+    assert masked_parameters(model) == [(model[1], "weight")]

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import torch
 from torch import nn
@@ -67,13 +68,16 @@ class SearchResult:
         """The sparsest round whose final test accuracy is within 0.5 points of the dense run."""
         if not self.rounds:
             raise ValueError("no rounds recorded")
-        dense = self.rounds[0].final_test
+        dense = next((r for r in self.rounds if r.round == 0), None)
         if dense is None:
-            return self.rounds[0]
+            raise ValueError("the dense round (round 0) is not in this result")
+        baseline = dense.final_test
+        if baseline is None or math.isnan(baseline.accuracy):
+            return dense
         eligible = [
             r
             for r in self.rounds
-            if r.final_test and r.final_test.accuracy >= dense.accuracy - 0.005
+            if r.final_test and r.final_test.accuracy >= baseline.accuracy - 0.005
         ]
         return min(eligible, key=lambda r: r.density)
 
@@ -119,6 +123,8 @@ class WinningTicket:
     ) -> None:
         if rewind_step < 0:
             raise ValueError("rewind_step must be >= 0")
+        if rewind_step > 0 and Rewind(rewind) is not Rewind.WEIGHTS:
+            raise ValueError("rewind_step only applies to rewind='weights'")
         self.model = model
         self.trainer = trainer
         self.strategy: PruningStrategy = strategy or GlobalMagnitudePruning()
@@ -153,7 +159,7 @@ class WinningTicket:
         if rounds < 0 or epochs < 1:
             raise ValueError("rounds must be >= 0 and epochs >= 1")
         if self._reporter is None and self.output_dir is not None:
-            self._reporter = CsvReporter(self.output_dir)
+            self._reporter = CsvReporter(self.output_dir, keep_rounds_below=self.rounds_completed)
         reporter = self._reporter
         start = self.rounds_completed
         # A fresh search also trains the dense network as round 0.
@@ -167,12 +173,10 @@ class WinningTicket:
             density = overall_density(layers)
             bar.set_postfix(density=f"{density:.3f}")
 
-            on_step = self._capture_rewind if self._needs_late_snapshot() else None
-            epochs_result = self.trainer.fit(self.model, epochs, on_step=on_step)
             if self._needs_late_snapshot():
-                raise ValueError(
-                    f"rewind_step={self.rewind_step} was never reached during the dense round"
-                )
+                epochs_result = self._fit_capturing_late_snapshot(epochs)
+            else:
+                epochs_result = self.trainer.fit(self.model, epochs)
 
             result = RoundResult(
                 round=round_,
@@ -199,10 +203,15 @@ class WinningTicket:
     def search_to_density(
         self, target_density: float, epochs: int, prune_fraction: float = 0.2
     ) -> SearchResult:
-        """Prune until at most ``target_density`` of the prunable weights remain."""
-        needed = rounds_for_density(target_density, prune_fraction)
-        done = max(self.rounds_completed - 1, 0)
-        return self.search(max(needed - done, 0), epochs, prune_fraction)
+        """Prune one round at a time until at most ``target_density`` of the weights remain."""
+        rounds_for_density(target_density, prune_fraction)  # validates the arguments
+        if self.rounds_completed == 0:
+            self.search(0, epochs, prune_fraction)
+        while (before := self.density()) > target_density:
+            self.search(1, epochs, prune_fraction)
+            if self.density() >= before:
+                raise RuntimeError("pruning strategy removed no weights; cannot reach target")
+        return SearchResult(list(self.history))
 
     def density(self) -> float:
         return overall_density(sparsity_report(self.model, self.parameters))
@@ -224,13 +233,32 @@ class WinningTicket:
             model=self.model,
             rewind_state=self._rewind_state,
             rounds_completed=self.rounds_completed,
+            history=[_round_to_dict(r) for r in self.history],
         )
 
-    def load(self, path: str | Path) -> None:
-        """Resume from a checkpoint written by :meth:`save` for the same architecture."""
-        checkpoint = load_checkpoint(path, self.model, parameters=lambda _: self.parameters)
+    def load(self, path: str | Path, map_location: torch.device | str | None = None) -> None:
+        """Resume from a checkpoint written by :meth:`save` for the same architecture.
+
+        Tensors are loaded onto the device the model currently lives on unless
+        ``map_location`` says otherwise.
+        """
+        if map_location is None:
+            map_location = next(self.model.parameters()).device
+        checkpoint = load_checkpoint(
+            path, self.model, parameters=lambda _: self.parameters, map_location=map_location
+        )
+        late_snapshot_pending = self.rewind_step > 0 and checkpoint.rounds_completed == 0
+        if (
+            self.rewind is Rewind.WEIGHTS
+            and checkpoint.rewind_state is None
+            and not late_snapshot_pending
+        ):
+            raise ValueError(
+                "checkpoint has no rewind state, so it cannot resume a rewind='weights' search"
+            )
         self._rewind_state = checkpoint.rewind_state
         self.rounds_completed = checkpoint.rounds_completed
+        self.history = [_round_from_dict(r) for r in checkpoint.history]
 
     def __call__(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.model(inputs)  # type: ignore[no-any-return]
@@ -260,10 +288,22 @@ class WinningTicket:
         if step == self.rewind_step and self._rewind_state is None:
             self._rewind_state = self._snapshot()
 
+    def _fit_capturing_late_snapshot(self, epochs: int) -> list[EpochResult]:
+        initial = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
+        results = self.trainer.fit(self.model, epochs, on_step=self._capture_rewind)
+        if self._rewind_state is None:
+            # Put the untrained weights back so a retry starts from the real init.
+            self.model.load_state_dict(initial)
+            raise ValueError(
+                f"rewind_step={self.rewind_step} was never reached during the dense round"
+            )
+        return results
+
     def _rewind(self) -> None:
         match self.rewind:
             case Rewind.WEIGHTS:
-                assert self._rewind_state is not None
+                if self._rewind_state is None:
+                    raise RuntimeError("no rewind state captured")
                 with torch.no_grad():
                     state = self.model.state_dict()
                     for key, value in self._rewind_state.items():
@@ -282,3 +322,24 @@ class WinningTicket:
     def _checkpoint_path(self, round_: int) -> Path:
         assert self.output_dir is not None
         return self.output_dir / "checkpoints" / f"round_{round_:03d}.pt"
+
+
+def _round_to_dict(result: RoundResult) -> dict[str, Any]:
+    return asdict(result)
+
+
+def _metrics(data: dict[str, float]) -> Metrics:
+    return Metrics(loss=float(data["loss"]), accuracy=float(data["accuracy"]))
+
+
+def _round_from_dict(data: dict[str, Any]) -> RoundResult:
+    return RoundResult(
+        round=int(data["round"]),
+        density=float(data["density"]),
+        epochs=[
+            EpochResult(epoch=int(e["epoch"]), train=_metrics(e["train"]), test=_metrics(e["test"]))
+            for e in data["epochs"]
+        ],
+        layers=[LayerSparsity(**layer) for layer in data["layers"]],
+        extra_metrics={k: _metrics(v) for k, v in data["extra_metrics"].items()},
+    )

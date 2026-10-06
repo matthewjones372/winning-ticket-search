@@ -56,6 +56,16 @@ def remove_masks(parameters: Sequence[PrunableParameter]) -> None:
             prune.remove(module, name)  # type: ignore[no-untyped-call]
 
 
+def masked_parameters(model: nn.Module) -> list[PrunableParameter]:
+    """Every ``(module, name)`` in ``model`` that currently carries a pruning mask."""
+    return [
+        (module, buffer[: -len("_mask")])
+        for module in model.modules()
+        for buffer, _ in module.named_buffers(recurse=False)
+        if buffer.endswith("_mask")
+    ]
+
+
 def detach_masked_weights(parameters: Sequence[PrunableParameter]) -> None:
     """Recompute ``weight = weight_orig * weight_mask`` outside autograd.
 
@@ -93,8 +103,18 @@ class GlobalMagnitudePruning:
 
     def prune(self, parameters: Sequence[PrunableParameter], fraction: float) -> None:
         _check_fraction(fraction)
+        # Rank the live weights explicitly. The derived `weight` attribute is only
+        # refreshed by a forward pass, so it can be stale straight after training.
+        scores = {
+            (module, name): getattr(module, f"{name}_orig", getattr(module, name)).detach()
+            * get_mask(module, name)
+            for module, name in parameters
+        }
         prune.global_unstructured(
-            list(parameters), pruning_method=prune.L1Unstructured, amount=fraction
+            list(parameters),
+            pruning_method=prune.L1Unstructured,
+            importance_scores=scores,
+            amount=fraction,
         )
 
 

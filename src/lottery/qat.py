@@ -5,7 +5,9 @@ Requires the ``qat`` extra: ``uv add 'lottery[qat]'``.
 Linear layers are swapped for torchao's ``FakeQuantizedLinear`` *before* pruning masks
 are attached, so training sees both the sparsity mask and simulated quantisation. At
 conversion time the masks are baked into the weights first and the model is then
-quantised for real; zero weights stay exactly zero under symmetric quantisation.
+quantised for real. Pruned weights stay exactly zero under symmetric weight schemes
+(the default); asymmetric ones such as int4 weight-only may map them to a small
+non-zero value.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch import nn
 
-from lottery.pruning import default_prunable_parameters, detach_masked_weights, remove_masks
+from lottery.pruning import detach_masked_weights, masked_parameters, remove_masks
 from lottery.ticket import WinningTicket
 from lottery.training import Metrics, Trainer
 
@@ -67,9 +69,9 @@ def convert_qat(
     filter_fn: ModuleFilter | None = None,
 ) -> nn.Module:
     """Return a truly quantised copy of a fake-quantised (and possibly pruned) model."""
-    detach_masked_weights(default_prunable_parameters(model))
+    detach_masked_weights(masked_parameters(model))
     converted = copy.deepcopy(model)
-    remove_masks(default_prunable_parameters(converted))
+    remove_masks(masked_parameters(converted))
     kwargs: dict[str, Any] = {} if filter_fn is None else {"filter_fn": filter_fn}
     quantize_(converted, QATConfig(base_config or default_qat_config(), step="convert"), **kwargs)
     return converted.eval()
