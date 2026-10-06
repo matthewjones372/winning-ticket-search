@@ -2,7 +2,7 @@ import lottery
 
 
 def test_version_comes_from_package_metadata():
-    assert lottery.__version__ == "2.2.0"
+    assert lottery.__version__ == "2.3.0"
 
 
 def test_public_api_exports_resolve():
