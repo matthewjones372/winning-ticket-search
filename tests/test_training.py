@@ -1,4 +1,5 @@
 import math
+from functools import partial
 
 import pytest
 import torch
@@ -143,3 +144,14 @@ def test_on_epoch_called_with_each_result(tiny_net, trainer):
     seen = []
     results = trainer.fit(tiny_net, epochs=3, on_epoch=seen.append)
     assert seen == results
+
+
+def test_any_torch_optimiser_can_be_passed_with_partial(tiny_net, classification_data):
+    trainer = ClassificationTrainer(
+        nn.CrossEntropyLoss(),
+        classification_data,
+        classification_data,
+        optimiser=partial(torch.optim.AdamW, lr=3e-3, weight_decay=0.01),
+    )
+    results = trainer.fit(tiny_net, epochs=2)
+    assert len(results) == 2

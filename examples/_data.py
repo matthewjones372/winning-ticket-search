@@ -15,11 +15,8 @@ type Loaders = tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]
 
 
 def device() -> torch.device:
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+    """The machine's accelerator (CUDA, MPS, XPU, ...) if it has a usable one, else CPU."""
+    return torch.accelerator.current_accelerator(check_available=True) or torch.device("cpu")
 
 
 def _loader(data: Dataset[Any], batch_size: int, shuffle: bool) -> DataLoader[Any]:

@@ -76,6 +76,99 @@ WinningTicket(model, trainer, rewind="random")  # random re-init with each layer
 WinningTicket(model, trainer, rewind="none")  # keep trained weights, restart the LR schedule
 ```
 
+### Optimisers
+
+`optimiser=` takes anything that builds an optimiser from the parameters, so any torch
+optimiser works through `functools.partial`. `sgd()` and `adam()` are shorthands with the
+paper's defaults.
+
+```python
+from functools import partial
+
+ClassificationTrainer(
+    loss_fn, train_loader, test_loader, optimiser=partial(torch.optim.AdamW, lr=3e-4)
+)
+```
+
+### Your own training loop
+
+`ClassificationTrainer` is one implementation of the `Trainer` protocol: any object with
+`fit` and `evaluate` methods like the ones below can drive the search. Use this to train
+with [Accelerate](https://huggingface.co/docs/accelerate), Lightning or your own loop. For
+example, with Accelerate handling devices, mixed precision and multiple GPUs:
+
+```python
+from dataclasses import dataclass
+from functools import partial
+
+import torch
+from accelerate import Accelerator
+from torch import nn
+from torch.utils.data import DataLoader
+
+from lottery import EpochResult, Metrics
+from lottery.training import OptimiserFactory
+
+
+@dataclass
+class AccelerateTrainer:
+    """Anything with ``fit`` and ``evaluate`` like this can drive the search."""
+
+    train_loader: DataLoader
+    test_loader: DataLoader
+    optimiser: OptimiserFactory = partial(torch.optim.AdamW, lr=1e-3)
+
+    def fit(self, model, epochs, on_step=None, on_epoch=None):
+        # A fresh optimiser every call: each pruning round restarts the schedule.
+        accelerator = Accelerator()  # device placement, mixed precision, multi-GPU
+        optimiser = self.optimiser(p for p in model.parameters() if p.requires_grad)
+        prepared, optimiser, loader = accelerator.prepare(model, optimiser, self.train_loader)
+        results, step = [], 0
+        for epoch in range(epochs):
+            prepared.train()
+            loss_sum, correct, seen = 0.0, 0, 0
+            for inputs, targets in loader:
+                optimiser.zero_grad()
+                outputs = prepared(inputs)
+                loss = nn.functional.cross_entropy(outputs, targets)
+                accelerator.backward(loss)
+                optimiser.step()
+                step += 1
+                if on_step is not None:  # needed for late rewinding (rewind_step > 0)
+                    on_step(step, model)
+                loss_sum += loss.item() * len(targets)
+                correct += int((outputs.argmax(1) == targets).sum())
+                seen += len(targets)
+            train = Metrics(loss=loss_sum / seen, accuracy=correct / seen)
+            result = EpochResult(epoch, train=train, test=self.evaluate(model, accelerator.device))
+            results.append(result)
+            if on_epoch is not None:  # optional: lets callbacks see every epoch
+                on_epoch(result)
+        return results
+
+    @torch.inference_mode()
+    def evaluate(self, model, device=None):
+        model.eval()
+        loss_sum, correct, seen = 0.0, 0, 0
+        for inputs, targets in self.test_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
+            loss_sum += nn.functional.cross_entropy(outputs, targets, reduction="sum").item()
+            correct += int((outputs.argmax(1) == targets).sum())
+            seen += len(targets)
+        return Metrics(loss=loss_sum / seen, accuracy=correct / seen)
+```
+
+```python
+ticket = WinningTicket(model, AccelerateTrainer(train_loader, test_loader))
+```
+
+`fit` must build a fresh optimiser on every call, since each pruning round restarts the
+schedule. `on_step` is needed for late rewinding (`rewind_step > 0`). `on_epoch` is optional
+and lets callbacks such as `ProgressBar` see each epoch. With Lightning, the same shape
+works: run a new `lightning.Trainer` inside `fit`, and call `on_step` from a Lightning
+callback's `on_train_batch_end`.
+
 ### Quantisation-aware training
 
 ```python
