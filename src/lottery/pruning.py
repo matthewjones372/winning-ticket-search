@@ -103,13 +103,7 @@ class GlobalMagnitudePruning:
 
     def prune(self, parameters: Sequence[PrunableParameter], fraction: float) -> None:
         _check_fraction(fraction)
-        # Rank the live weights explicitly. The derived `weight` attribute is only
-        # refreshed by a forward pass, so it can be stale straight after training.
-        scores = {
-            (module, name): getattr(module, f"{name}_orig", getattr(module, name)).detach()
-            * get_mask(module, name)
-            for module, name in parameters
-        }
+        scores = {(module, name): _live_weights(module, name) for module, name in parameters}
         prune.global_unstructured(
             list(parameters),
             pruning_method=prune.L1Unstructured,
@@ -137,7 +131,19 @@ class LayerwiseMagnitudePruning:
         for index, (module, name) in enumerate(parameters):
             amount = fraction * self.output_layer_scale if index == last else fraction
             if amount > 0:
-                prune.l1_unstructured(module, name, amount=amount)  # type: ignore[no-untyped-call]
+                prune.l1_unstructured(  # type: ignore[no-untyped-call]
+                    module, name, amount=amount, importance_scores=_live_weights(module, name)
+                )
+
+
+def _live_weights(module: nn.Module, name: str) -> torch.Tensor:
+    """The masked weights as they are now, to rank by magnitude.
+
+    The derived ``module.<name>`` tensor is only refreshed by a forward pass, so it is
+    stale straight after training or after loading a checkpoint.
+    """
+    weights: torch.Tensor = getattr(module, f"{name}_orig", getattr(module, name))
+    return weights.detach() * get_mask(module, name)
 
 
 @dataclass(frozen=True, slots=True)

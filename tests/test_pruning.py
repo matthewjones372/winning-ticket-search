@@ -185,3 +185,15 @@ def test_masked_parameters_finds_every_mask():
     assert masked_parameters(model) == []
     attach_masks([(model[1], "weight")])
     assert masked_parameters(model) == [(model[1], "weight")]
+
+
+def test_layerwise_pruning_ranks_live_weights_not_the_stale_forward_copy():
+    model = nn.Sequential(nn.Linear(10, 10, bias=False))
+    params = default_prunable_parameters(model)
+    attach_masks(params)
+    with torch.no_grad():  # simulate training that never runs another forward
+        model[0].weight_orig.copy_(torch.arange(100.0).reshape(10, 10))
+
+    LayerwiseMagnitudePruning().prune(params, 0.5)
+
+    assert torch.equal(model[0].weight_mask.flatten(), (torch.arange(100) >= 50).float())

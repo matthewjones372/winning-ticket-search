@@ -3,7 +3,14 @@ import csv
 import pytest
 import torch
 
-from lottery import CsvLogger, WinningTicket, load_checkpoint, save_checkpoint
+from lottery import (
+    CsvLogger,
+    GlobalMagnitudePruning,
+    LayerwiseMagnitudePruning,
+    WinningTicket,
+    load_checkpoint,
+    save_checkpoint,
+)
 
 from .conftest import ShiftTrainer, TinyNet
 
@@ -90,3 +97,23 @@ def test_late_rewind_checkpoint_before_capture_can_be_loaded(tmp_path):
     resumed.load(path, map_location="cpu")
     resumed.search(rounds=1, epochs=1)
     assert resumed.rewind_state() is not None
+
+
+@pytest.mark.parametrize(
+    "strategy", [GlobalMagnitudePruning(), LayerwiseMagnitudePruning()], ids=["global", "layerwise"]
+)
+def test_resumed_search_prunes_the_same_weights_as_an_uninterrupted_one(
+    tmp_path, trainer, strategy
+):
+    """Loading a checkpoint leaves the derived `weight` tensor stale until a forward pass."""
+    original = WinningTicket(TinyNet(), trainer, strategy=strategy)
+    original.search(rounds=1, epochs=1)
+    path = original.save(tmp_path / "t.pt")
+    original.search(rounds=1, epochs=1)
+
+    resumed = WinningTicket(TinyNet(), trainer, strategy=strategy)
+    resumed.load(path)
+    resumed.search(rounds=1, epochs=1)
+
+    for key, mask in original.masks().items():
+        assert torch.equal(resumed.masks()[key], mask), key
