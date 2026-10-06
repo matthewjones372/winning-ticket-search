@@ -3,7 +3,7 @@
 Each round trains the fake-quantised network and also reports the accuracy of the
 truly int8-quantised model.
 
-    uv run --extra cpu --extra qat python examples/mnist_qat.py --rounds 5 --epochs 3
+    uv run --group cpu --extra vision --extra qat python examples/mnist_qat.py --rounds 5 --epochs 3
 """
 
 import argparse
@@ -23,10 +23,13 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--output", default="results/mnist_qat")
+    parser.add_argument(
+        "--fake-data", action="store_true", help="random images instead of downloading"
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    train_loader, test_loader = mnist(limit=args.limit)
+    train_loader, test_loader = mnist(limit=args.limit, fake=args.fake_data)
     # The default int8 config runs on CPU; pass base_config= for GPU int4/fp8 schemes.
     trainer = ClassificationTrainer(
         nn.CrossEntropyLoss(), train_loader, test_loader, optimiser=adam(lr=1.2e-3)

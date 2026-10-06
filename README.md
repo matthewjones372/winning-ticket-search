@@ -153,11 +153,14 @@ checkpoint and drops any after it.
 ## Examples
 
 ```shell
-uv run --extra cpu python examples/mnist_lenet.py --rounds 10 --epochs 5
-uv run --extra cpu python examples/mnist_lenet.py --rewind random   # compare against the control
-uv run --extra cu130 python examples/cifar10_conv.py --rewind-step 500
-uv run --extra cpu --extra qat python examples/mnist_qat.py
+uv run --group cpu --extra vision python examples/mnist_lenet.py --rounds 10 --epochs 5
+uv run --group cpu --extra vision python examples/mnist_lenet.py --rewind random   # compare against the control
+uv run --group cu130 --extra vision python examples/cifar10_conv.py --rewind-step 500
+uv run --group cpu --extra vision --extra qat python examples/mnist_qat.py
 ```
+
+Add `--fake-data --limit 120` to any of them for a quick run on random images, without
+downloading a dataset.
 
 A short MNIST run (10k training images, 2 epochs a round) reproduces the paper's
 qualitative result: rewound tickets hold or improve accuracy as they get sparser, while
@@ -171,14 +174,15 @@ randomly re-initialised ones degrade.
 
 ## Development
 
-The project uses [uv](https://docs.astral.sh/uv/). Choose a PyTorch build with an extra:
-`cpu` (also right for Apple Silicon) or `cu130`.
+The project uses [uv](https://docs.astral.sh/uv/). Choose a PyTorch build with a
+dependency group: `cpu` (also right for Apple Silicon) or `cu130` (Linux and Windows).
+They are not extras, so `pip install lottery` uses whatever torch you already have.
 
 ```shell
-uv sync --extra cpu --extra qat --extra vision
+uv sync --group cpu --extra qat --extra vision
 uv run pytest --cov
 uv run ruff check . && uv run ruff format --check .
-uv run mypy src
+uv run mypy src examples
 ```
 
 ## Upgrading from 1.x

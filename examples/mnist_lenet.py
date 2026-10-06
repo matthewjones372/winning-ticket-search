@@ -1,6 +1,6 @@
 """LeNet-300-100 on MNIST, the headline experiment from Frankle & Carbin (2019).
 
-uv run --extra cpu python examples/mnist_lenet.py --rounds 10 --epochs 5
+uv run --group cpu --extra vision python examples/mnist_lenet.py --rounds 10 --epochs 5
 """
 
 import argparse
@@ -28,10 +28,13 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="subsample for a quick run")
     parser.add_argument("--rewind", default="weights", choices=["weights", "random", "none"])
     parser.add_argument("--output", default="results/mnist_lenet")
+    parser.add_argument(
+        "--fake-data", action="store_true", help="random images instead of downloading"
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    train_loader, test_loader = mnist(limit=args.limit)
+    train_loader, test_loader = mnist(limit=args.limit, fake=args.fake_data)
     trainer = ClassificationTrainer(
         loss_fn=nn.CrossEntropyLoss(),
         train_loader=train_loader,

@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: "weekly"
     groups:
+      # torch, torchvision and torchao are released in lock-step (each torchvision pins
+      # one torch), so bumping them separately produces PRs that cannot resolve. Listed
+      # first so it wins over dev-tools for the torch builds in the cpu/cu130 groups.
+      pytorch:
+        patterns: ["torch", "torchvision", "torchao"]
       dev-tools:
         dependency-type: "development"
   - package-ecosystem: "github-actions"
