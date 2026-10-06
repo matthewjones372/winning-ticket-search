@@ -15,5 +15,5 @@ def test_lenet_shape():
 def test_conv_nets(cls, convs):
     model = cls(num_classes=7)
     assert model(torch.randn(2, 3, 32, 32)).shape == (2, 7)
-    ticket = WinningTicket(model, ShiftTrainer(), progress=False)
+    ticket = WinningTicket(model, ShiftTrainer())
     assert len(ticket.parameters) == convs + 3

@@ -3,13 +3,20 @@ import csv
 import pytest
 import torch
 
-from lottery import WinningTicket, load_checkpoint, save_checkpoint
+from lottery import (
+    CsvLogger,
+    GlobalMagnitudePruning,
+    LayerwiseMagnitudePruning,
+    WinningTicket,
+    load_checkpoint,
+    save_checkpoint,
+)
 
 from .conftest import ShiftTrainer, TinyNet
 
 
 def test_round_trip_restores_weights_masks_and_rewind_state(tmp_path):
-    ticket = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    ticket = WinningTicket(TinyNet(), ShiftTrainer())
     ticket.search(rounds=2, epochs=1)
     path = ticket.save(tmp_path / "nested" / "ticket.pt")
 
@@ -27,7 +34,7 @@ def test_checkpoints_load_with_weights_only(tmp_path):
         tmp_path / "c.pt", model=TinyNet(), rewind_state=None, rounds_completed=0
     )
     payload = torch.load(path, weights_only=True)
-    assert payload["format_version"] == 1
+    assert payload["format_version"] == 2
 
 
 def test_unknown_format_version_rejected(tmp_path):
@@ -38,11 +45,11 @@ def test_unknown_format_version_rejected(tmp_path):
 
 
 def test_ticket_resumes_from_checkpoint(tmp_path):
-    original = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    original = WinningTicket(TinyNet(), ShiftTrainer())
     original.search(rounds=2, epochs=1)
     path = original.save(tmp_path / "t.pt")
 
-    resumed = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    resumed = WinningTicket(TinyNet(), ShiftTrainer())
     resumed.load(path)
     assert resumed.rounds_completed == 3
     assert resumed.density() == pytest.approx(original.density())
@@ -55,12 +62,12 @@ def test_ticket_resumes_from_checkpoint(tmp_path):
 
 
 def test_resume_keeps_earlier_csv_rows(tmp_path):
-    original = WinningTicket(TinyNet(), ShiftTrainer(), output_dir=tmp_path, progress=False)
+    original = WinningTicket(TinyNet(), ShiftTrainer(), callbacks=[CsvLogger(tmp_path)])
     original.search(rounds=2, epochs=1)
     path = original.save(tmp_path / "t.pt")
     original.search(rounds=1, epochs=1)  # round 3, not in the checkpoint
 
-    resumed = WinningTicket(TinyNet(), ShiftTrainer(), output_dir=tmp_path, progress=False)
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(), callbacks=[CsvLogger(tmp_path)])
     resumed.load(path)
     resumed.search(rounds=2, epochs=1)
 
@@ -70,23 +77,101 @@ def test_resume_keeps_earlier_csv_rows(tmp_path):
 
 
 def test_loading_without_rewind_state_into_weights_ticket_is_rejected(tmp_path):
-    source = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random", progress=False)
+    source = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random")
     source.search(rounds=1, epochs=1)
     path = source.save(tmp_path / "t.pt")
 
     with pytest.raises(ValueError, match="no rewind state"):
-        WinningTicket(TinyNet(), ShiftTrainer(), progress=False).load(path)
+        WinningTicket(TinyNet(), ShiftTrainer()).load(path)
 
-    resumed = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random", progress=False)
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random")
     resumed.load(path)
     resumed.search(rounds=1, epochs=1)
     assert resumed.rounds_completed == 3
 
 
 def test_late_rewind_checkpoint_before_capture_can_be_loaded(tmp_path):
-    source = WinningTicket(TinyNet(), ShiftTrainer(), rewind_step=2, progress=False)
+    source = WinningTicket(TinyNet(), ShiftTrainer(), rewind_step=2)
     path = source.save(tmp_path / "t.pt")
-    resumed = WinningTicket(TinyNet(), ShiftTrainer(), rewind_step=2, progress=False)
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(), rewind_step=2)
     resumed.load(path, map_location="cpu")
     resumed.search(rounds=1, epochs=1)
     assert resumed.rewind_state() is not None
+
+
+@pytest.mark.parametrize(
+    "strategy", [GlobalMagnitudePruning(), LayerwiseMagnitudePruning()], ids=["global", "layerwise"]
+)
+def test_resumed_search_prunes_the_same_weights_as_an_uninterrupted_one(
+    tmp_path, trainer, strategy
+):
+    """Loading a checkpoint leaves the derived `weight` tensor stale until a forward pass."""
+    original = WinningTicket(TinyNet(), trainer, strategy=strategy)
+    original.search(rounds=1, epochs=1)
+    path = original.save(tmp_path / "t.pt")
+    original.search(rounds=1, epochs=1)
+
+    resumed = WinningTicket(TinyNet(), trainer, strategy=strategy)
+    resumed.load(path)
+    resumed.search(rounds=1, epochs=1)
+
+    for key, mask in original.masks().items():
+        assert torch.equal(resumed.masks()[key], mask), key
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"rewind": "none"}, "rewind='weights'"),
+        ({"rewind_step": 2}, "rewind_step=0"),
+    ],
+)
+def test_resuming_with_different_rewind_settings_is_rejected(tmp_path, kwargs, match):
+    source = WinningTicket(TinyNet(), ShiftTrainer())
+    source.search(rounds=1, epochs=1)
+    path = source.save(tmp_path / "t.pt")
+    with pytest.raises(ValueError, match=match):
+        WinningTicket(TinyNet(), ShiftTrainer(), **kwargs).load(path)
+
+
+def test_resuming_with_a_different_strategy_warns(tmp_path):
+    source = WinningTicket(TinyNet(), ShiftTrainer())
+    path = source.save(tmp_path / "t.pt")
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(), strategy=LayerwiseMagnitudePruning())
+    with pytest.warns(UserWarning, match="GlobalMagnitudePruning"):
+        resumed.load(path)
+
+
+def test_random_rewind_resume_is_reproducible(tmp_path):
+    source = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random")
+    source.search(rounds=1, epochs=1)
+    path = source.save(tmp_path / "t.pt")
+    source.search(rounds=1, epochs=1)
+
+    torch.manual_seed(1234)  # whatever the RNG was doing in between
+    resumed = WinningTicket(TinyNet(), ShiftTrainer(), rewind="random")
+    resumed.load(path)
+    resumed.search(rounds=1, epochs=1)
+    for key, value in source.model.state_dict().items():
+        assert torch.equal(resumed.model.state_dict()[key], value), key
+
+
+def test_checkpoint_without_history_cannot_resume(tmp_path):
+    model = WinningTicket(TinyNet(), ShiftTrainer(), rewind="none").model
+    path = save_checkpoint(tmp_path / "c.pt", model=model, rewind_state=None, rounds_completed=2)
+    with pytest.raises(ValueError, match="history"):
+        WinningTicket(TinyNet(), ShiftTrainer(), rewind="none").load(path)
+
+
+def test_version_1_checkpoints_still_load(tmp_path):
+    ticket = WinningTicket(TinyNet(), ShiftTrainer())
+    ticket.search(rounds=1, epochs=1)
+    path = ticket.save(tmp_path / "t.pt")
+    payload = torch.load(path, weights_only=True)
+    payload["format_version"] = 1
+    del payload["config"], payload["rng_state"]
+    torch.save(payload, path)
+
+    resumed = WinningTicket(TinyNet(), ShiftTrainer())
+    resumed.load(path)
+    assert resumed.rounds_completed == 2

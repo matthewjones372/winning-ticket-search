@@ -8,6 +8,7 @@ pytest.importorskip("torchao")
 
 from torchao.quantization.qat import FakeQuantizedLinear
 
+from lottery import CsvLogger
 from lottery.pruning import GlobalMagnitudePruning, default_prunable_parameters
 from lottery.qat import QatWinningTicket, convert_qat, prepare_qat
 
@@ -40,7 +41,6 @@ def test_convert_preserves_sparsity_and_leaves_source_untouched():
     model = prepare_qat(TinyNet())
     params = default_prunable_parameters(model)
     GlobalMagnitudePruning().prune(params, 0.5)
-    pruned_before = int((model.fc1.weight_mask == 0).sum())
     model.eval()
 
     quantised = convert_qat(model)
@@ -48,30 +48,41 @@ def test_convert_preserves_sparsity_and_leaves_source_untouched():
     weight = quantised.fc1.weight
     assert type(quantised.fc1) is nn.Linear
     assert type(weight).__name__ == "IntxUnpackedToInt8Tensor"
-    assert int((weight.qdata == 0).sum()) >= pruned_before
+    assert torch.all(weight.qdata[model.fc1.weight_mask == 0] == 0)
     assert hasattr(model.fc1, "weight_mask"), "source model must keep its masks"
     x = torch.randn(4, 8)
     assert torch.allclose(quantised(x), model(x), atol=0.2)
 
 
 def test_qat_ticket_records_quantised_metrics():
-    ticket = QatWinningTicket(TinyNet(), ShiftTrainer(delta=0.0), progress=False)
+    ticket = QatWinningTicket(TinyNet(), ShiftTrainer(delta=0.0))
     result = ticket.search(rounds=1, epochs=1)
     assert all("quantised" in r.extra_metrics for r in result.rounds)
     assert result.rounds[-1].density == pytest.approx(0.8, abs=0.01)
 
 
+def test_quantised_model_is_evaluated_on_the_quantised_device():
+    devices = []
+
+    class Spy(ShiftTrainer):
+        def evaluate(self, model, device=None):
+            devices.append(device)
+            return super().evaluate(model, device)
+
+    QatWinningTicket(TinyNet(), Spy(delta=0.0)).search(rounds=0, epochs=1)
+    QatWinningTicket(TinyNet(), Spy(delta=0.0), quantised_device="meta").search(rounds=0, epochs=1)
+    assert devices == [torch.device("cpu"), torch.device("meta")]
+
+
 def test_qat_ticket_can_skip_quantised_eval():
-    ticket = QatWinningTicket(
-        TinyNet(), ShiftTrainer(delta=0.0), evaluate_quantised=False, progress=False
-    )
+    ticket = QatWinningTicket(TinyNet(), ShiftTrainer(delta=0.0), evaluate_quantised=False)
     result = ticket.search(rounds=0, epochs=1)
     assert result.rounds[0].extra_metrics == {}
 
 
 def test_qat_ticket_with_real_trainer(trainer, tmp_path):
     model = nn.Sequential(nn.Linear(8, 32), nn.ReLU(), nn.Linear(32, 3))
-    ticket = QatWinningTicket(model, trainer, output_dir=tmp_path, progress=False)
+    ticket = QatWinningTicket(model, trainer, callbacks=[CsvLogger(tmp_path)])
     result = ticket.search(rounds=1, epochs=2)
     quantised = result.rounds[-1].extra_metrics["quantised"]
     fake = result.rounds[-1].final_test
@@ -86,7 +97,6 @@ def test_quantised_model_with_custom_parameter_selector():
         TinyNet(),
         ShiftTrainer(delta=0.0),
         parameters=lambda m: [(m.fc2, "weight")],
-        progress=False,
     )
     ticket.search(rounds=1, epochs=1, prune_fraction=0.5)
     quantised = ticket.quantised_model()

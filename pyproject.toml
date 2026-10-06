@@ -28,9 +28,6 @@ dependencies = [
 qat = ["torchao>=0.18"]
 # Dataset loaders used by the examples.
 vision = ["torchvision>=0.24"]
-# Pick at most one PyTorch build. `uv sync --extra cpu` or `uv sync --extra cu130`.
-cpu = ["torch>=2.9", "torchvision>=0.24"]
-cu130 = ["torch>=2.9", "torchvision>=0.24"]
 
 [project.urls]
 Repository = "https://github.com/matthewjones372/winning-ticket-search"
@@ -43,6 +40,11 @@ dev = [
     "ruff>=0.13",
     "mypy>=1.18",
 ]
+# Which PyTorch build uv installs, for working in this repo. These are groups, not extras,
+# so they stay out of the published metadata: `pip install lottery` takes whatever torch
+# the environment already has. Pick at most one: `uv sync --group cpu` or `--group cu130`.
+cpu = ["torch>=2.9", "torchvision>=0.24"]
+cu130 = ["torch>=2.9", "torchvision>=0.24"]
 
 [build-system]
 requires = ["uv_build>=0.9,<0.12"]
@@ -51,16 +53,18 @@ build-backend = "uv_build"
 # ---------------------------------------------------------------- uv
 
 [tool.uv]
-conflicts = [[{ extra = "cpu" }, { extra = "cu130" }]]
+conflicts = [[{ group = "cpu" }, { group = "cu130" }]]
 
+# The CPU index also serves macOS wheels. There are no CUDA builds for macOS, so `cu130`
+# there falls back to the PyPI build (CPU and MPS) instead of failing to install.
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform != 'darwin'" },
-    { index = "pytorch-cu130", extra = "cu130" },
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cu130", group = "cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 torchvision = [
-    { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform != 'darwin'" },
-    { index = "pytorch-cu130", extra = "cu130" },
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cu130", group = "cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [[tool.uv.index]]

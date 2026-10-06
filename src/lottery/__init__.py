@@ -1,7 +1,9 @@
 """Lottery ticket search by iterative magnitude pruning."""
 
+import logging
 from importlib.metadata import PackageNotFoundError, version
 
+from lottery.callbacks import Callback, CsvLogger, ProgressBar
 from lottery.checkpoint import Checkpoint, load_checkpoint, save_checkpoint
 from lottery.pruning import (
     GlobalMagnitudePruning,
@@ -26,14 +28,20 @@ try:
 except PackageNotFoundError:  # pragma: no cover - running from a source tree
     __version__ = "0.0.0"
 
+# Silent unless the application configures logging.
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 __all__ = [
+    "Callback",
     "Checkpoint",
     "ClassificationTrainer",
+    "CsvLogger",
     "EpochResult",
     "GlobalMagnitudePruning",
     "LayerSparsity",
     "LayerwiseMagnitudePruning",
     "Metrics",
+    "ProgressBar",
     "PruningStrategy",
     "Rewind",
     "RoundResult",

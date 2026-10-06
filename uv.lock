@@ -2,18 +2,20 @@ version = 1
 revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
-    "python_full_version >= '3.15' and extra != 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130'",
-    "python_full_version < '3.15' and extra != 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130'",
-    "python_full_version >= '3.15' and sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
-    "python_full_version < '3.15' and sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
-    "python_full_version >= '3.15' and sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
-    "python_full_version < '3.15' and sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
-    "python_full_version >= '3.15' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
-    "python_full_version < '3.15' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
+    "(python_full_version >= '3.15' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (python_full_version >= '3.15' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')",
+    "(python_full_version < '3.15' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (python_full_version < '3.15' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')",
+    "python_full_version >= '3.15' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130'",
+    "python_full_version < '3.15' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130'",
+    "python_full_version >= '3.15' and sys_platform != 'darwin' and extra == 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130'",
+    "python_full_version < '3.15' and sys_platform != 'darwin' and extra == 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130'",
+    "python_full_version >= '3.15' and sys_platform == 'darwin' and extra == 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130'",
+    "python_full_version < '3.15' and sys_platform == 'darwin' and extra == 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130'",
+    "python_full_version >= '3.15' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130'",
+    "python_full_version < '3.15' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130'",
 ]
 conflicts = [[
-    { package = "lottery", extra = "cpu" },
-    { package = "lottery", extra = "cu130" },
+    { package = "lottery", group = "cpu" },
+    { package = "lottery", group = "cu130" },
 ]]
 
 [[package]]
@@ -193,7 +195,7 @@ name = "cuda-bindings"
 version = "13.4.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-pathfinder", marker = "extra == 'extra-7-lottery-cu130' or extra != 'extra-7-lottery-cpu'" },
+    { name = "cuda-pathfinder", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/65/11/1293429c1c3a3e19b551275e65efddd122a905bbe7e368816a59f3ef2a41/cuda_bindings-13.4.3-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bfbd3f7d4ac04dd41dc49121b9e408c8283992f47124c2290ecb79bbbadcca8e", size = 6488226, upload-time = "2026-09-23T02:22:00.578Z" },
@@ -232,43 +234,43 @@ wheels = [
 
 [package.optional-dependencies]
 cublas = [
-    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 cudart = [
-    { name = "nvidia-cuda-runtime", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-cuda-runtime", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 cufft = [
-    { name = "nvidia-cufft", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-cufft", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 cufile = [
-    { name = "nvidia-cufile", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'aarch64' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (platform_machine == 'x86_64' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform != 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-cufile", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'aarch64' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (platform_machine == 'x86_64' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform != 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 cupti = [
-    { name = "nvidia-cuda-cupti", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-cuda-cupti", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 curand = [
-    { name = "nvidia-curand", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-curand", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 cusolver = [
-    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-cusolver", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-cublas", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-cusolver", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 cusparse = [
-    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-cusparse", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 nvjitlink = [
-    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 nvrtc = [
-    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-cuda-nvrtc", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 nvtx = [
-    { name = "nvidia-nvtx", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'extra-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "nvidia-nvtx", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (sys_platform != 'linux' and sys_platform != 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform == 'win32' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 
 [[package]]
@@ -416,34 +418,35 @@ name = "lottery"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [
-    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-7-lottery-cu130'" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'group-7-lottery-cu130'" },
     { name = "tqdm" },
 ]
 
 [package.optional-dependencies]
+qat = [
+    { name = "torchao" },
+]
+vision = [
+    { name = "torchvision", version = "0.29.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torchvision", version = "0.29.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "torchvision", version = "0.29.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torchvision", version = "0.29.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'group-7-lottery-cu130'" },
+]
+
+[package.dev-dependencies]
 cpu = [
-    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "torchvision", version = "0.29.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "torchvision", version = "0.29.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torchvision", version = "0.29.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torchvision", version = "0.29.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 cu130 = [
     { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" } },
     { name = "torchvision", version = "0.29.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" } },
 ]
-qat = [
-    { name = "torchao" },
-]
-vision = [
-    { name = "torchvision", version = "0.29.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "torchvision", version = "0.29.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "torchvision", version = "0.29.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-7-lottery-cu130'" },
-]
-
-[package.dev-dependencies]
 dev = [
     { name = "mypy" },
     { name = "pytest" },
@@ -454,19 +457,23 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "torch", specifier = ">=2.9" },
-    { name = "torch", marker = "sys_platform == 'darwin' and extra == 'cpu'", specifier = ">=2.9" },
-    { name = "torch", marker = "sys_platform != 'darwin' and extra == 'cpu'", specifier = ">=2.9", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "lottery", extra = "cpu" } },
-    { name = "torch", marker = "extra == 'cu130'", specifier = ">=2.9", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "lottery", extra = "cu130" } },
     { name = "torchao", marker = "extra == 'qat'", specifier = ">=0.18" },
-    { name = "torchvision", marker = "sys_platform == 'darwin' and extra == 'cpu'", specifier = ">=0.24" },
-    { name = "torchvision", marker = "sys_platform != 'darwin' and extra == 'cpu'", specifier = ">=0.24", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "lottery", extra = "cpu" } },
-    { name = "torchvision", marker = "extra == 'cu130'", specifier = ">=0.24", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "lottery", extra = "cu130" } },
     { name = "torchvision", marker = "extra == 'vision'", specifier = ">=0.24" },
     { name = "tqdm", specifier = ">=4.66" },
 ]
-provides-extras = ["qat", "vision", "cpu", "cu130"]
+provides-extras = ["qat", "vision"]
 
 [package.metadata.requires-dev]
+cpu = [
+    { name = "torch", specifier = ">=2.9", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "lottery", group = "cpu" } },
+    { name = "torchvision", specifier = ">=0.24", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "lottery", group = "cpu" } },
+]
+cu130 = [
+    { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=2.9" },
+    { name = "torch", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = ">=2.9", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "lottery", group = "cu130" } },
+    { name = "torchvision", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=0.24" },
+    { name = "torchvision", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = ">=0.24", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "lottery", group = "cu130" } },
+]
 dev = [
     { name = "mypy", specifier = ">=1.18" },
     { name = "pytest", specifier = ">=8.3" },
@@ -602,7 +609,7 @@ version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ast-serialize" },
-    { name = "librt", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "librt", marker = "platform_python_implementation != 'PyPy' or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
     { name = "mypy-extensions" },
     { name = "pathspec" },
     { name = "typing-extensions" },
@@ -746,7 +753,7 @@ name = "nvidia-cublas"
 version = "13.1.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cuda-nvrtc", marker = "extra == 'extra-7-lottery-cu130' or extra != 'extra-7-lottery-cpu'" },
+    { name = "nvidia-cuda-nvrtc", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/a1/0bd24ee8c8d03adac032fd2909426a00c88f8c57961b1277ded97f91119f/nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:b7a210458267ac818974c53038fbec2e969d5c99f305ab15c72522fa9f001dd5", size = 542848918, upload-time = "2026-04-08T18:46:22.985Z" },
@@ -789,7 +796,7 @@ name = "nvidia-cudnn-cu13"
 version = "9.24.0.43"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas", marker = "extra == 'extra-7-lottery-cu130' or extra != 'extra-7-lottery-cpu'" },
+    { name = "nvidia-cublas", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ca/30/7c257e3d5cb4fecb147b93895c66e29c93f8e76d74b45bb418ff0587c4ec/nvidia_cudnn_cu13-9.24.0.43-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:a6812a554a1ff0413e9c52b84c26c050380649ab9615f9c16bded368ce9f421f", size = 650976863, upload-time = "2026-07-02T16:23:39.248Z" },
@@ -802,7 +809,7 @@ name = "nvidia-cufft"
 version = "12.0.0.61"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink", marker = "extra == 'extra-7-lottery-cu130' or extra != 'extra-7-lottery-cpu'" },
+    { name = "nvidia-nvjitlink", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/ae/f417a75c0259e85c1d2f83ca4e960289a5f814ed0cea74d18c353d3e989d/nvidia_cufft-12.0.0.61-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:2708c852ef8cd89d1d2068bdbece0aa188813a0c934db3779b9b1faa8442e5f5", size = 214053554, upload-time = "2025-09-04T08:31:38.196Z" },
@@ -834,9 +841,9 @@ name = "nvidia-cusolver"
 version = "12.0.4.66"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas", marker = "extra == 'extra-7-lottery-cu130' or extra != 'extra-7-lottery-cpu'" },
-    { name = "nvidia-cusparse", marker = "extra == 'extra-7-lottery-cu130' or extra != 'extra-7-lottery-cpu'" },
-    { name = "nvidia-nvjitlink", marker = "extra == 'extra-7-lottery-cu130' or extra != 'extra-7-lottery-cpu'" },
+    { name = "nvidia-cublas", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-cusparse", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-nvjitlink", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c8/c3/b30c9e935fc01e3da443ec0116ed1b2a009bb867f5324d3f2d7e533e776b/nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:02c2457eaa9e39de20f880f4bd8820e6a1cfb9f9a34f820eb12a155aa5bc92d2", size = 223467760, upload-time = "2025-09-04T08:33:04.222Z" },
@@ -849,7 +856,7 @@ name = "nvidia-cusparse"
 version = "12.6.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink", marker = "extra == 'extra-7-lottery-cu130' or extra != 'extra-7-lottery-cpu'" },
+    { name = "nvidia-nvjitlink", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu') or (sys_platform == 'win32' and extra != 'group-7-lottery-cpu') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f8/94/5c26f33738ae35276672f12615a64bd008ed5be6d1ebcb23579285d960a9/nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:80bcc4662f23f1054ee334a15c72b8940402975e0eab63178fc7e670aa59472c", size = 162155568, upload-time = "2025-09-04T08:33:42.864Z" },
@@ -1018,7 +1025,7 @@ name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
@@ -1098,13 +1105,13 @@ resolution-markers = [
     "python_full_version < '3.15' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "fsspec", marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "jinja2", marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "networkx", marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "setuptools", marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "sympy", marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "typing-extensions", marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "filelock", marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "fsspec", marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "jinja2", marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "networkx", marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "setuptools", marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "sympy", marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "typing-extensions", marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.1-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:9cf3082d25560efb1eef921871595227c0cf305abb7761ca45b6b988ef6cdd45", upload-time = "2026-09-30T19:50:32Z" },
@@ -1124,20 +1131,20 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 dependencies = [
-    { name = "cuda-bindings", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "filelock", marker = "(extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "fsspec", marker = "(extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "jinja2", marker = "(extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "networkx", marker = "(extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "nvidia-cudnn-cu13", marker = "(sys_platform == 'linux' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "setuptools", marker = "(extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "sympy", marker = "(extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "triton", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "typing-extensions", marker = "(extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
+    { name = "cuda-bindings", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "filelock", marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "fsspec", marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "jinja2", marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "networkx", marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "nvidia-cudnn-cu13", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "setuptools", marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "sympy", marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "triton", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "typing-extensions", marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4b/3c/379349820e9a6e713826de3d0b88f07728541bdcabe2a3afd128871cdc4b/torch-2.14.1-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:420dbf314c180ee4b86e9bc00aee5746a7d6e5bacdd7df925af671ed393f0b2e", size = 127307099, upload-time = "2026-09-30T17:44:10.421Z" },
@@ -1167,13 +1174,13 @@ resolution-markers = [
     "python_full_version < '3.15' and sys_platform != 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "setuptools", marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "setuptools", marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.14.1%2Bcpu-cp312-cp312-linux_s390x.whl", hash = "sha256:6b06a7f6275c5fdecaf1dbf5546f0820b024a97785575bb99e3d9930d83cd86b", upload-time = "2026-09-30T19:47:30Z" },
@@ -1207,24 +1214,26 @@ name = "torch"
 version = "2.14.1+cu130"
 source = { registry = "https://download.pytorch.org/whl/cu130" }
 resolution-markers = [
-    "python_full_version >= '3.15'",
-    "python_full_version < '3.15'",
+    "(python_full_version >= '3.15' and sys_platform == 'linux') or (python_full_version >= '3.15' and sys_platform == 'win32')",
+    "(python_full_version < '3.15' and sys_platform == 'linux') or (python_full_version < '3.15' and sys_platform == 'win32')",
+    "python_full_version >= '3.15' and sys_platform != 'linux' and sys_platform != 'win32'",
+    "python_full_version < '3.15' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "cuda-bindings", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra == 'extra-7-lottery-cu130') or (python_full_version >= '3.15' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform != 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra == 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "filelock", marker = "extra == 'extra-7-lottery-cu130'" },
-    { name = "fsspec", marker = "extra == 'extra-7-lottery-cu130'" },
-    { name = "jinja2", marker = "extra == 'extra-7-lottery-cu130'" },
-    { name = "networkx", marker = "extra == 'extra-7-lottery-cu130'" },
-    { name = "nvidia-cudnn-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra == 'extra-7-lottery-cu130') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "setuptools", marker = "extra == 'extra-7-lottery-cu130'" },
-    { name = "sympy", marker = "extra == 'extra-7-lottery-cu130'" },
-    { name = "triton", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra == 'extra-7-lottery-cu130') or (python_full_version >= '3.15' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (sys_platform != 'linux' and extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "typing-extensions", marker = "extra == 'extra-7-lottery-cu130'" },
+    { name = "cuda-bindings", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra == 'group-7-lottery-cu130') or (python_full_version >= '3.15' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform != 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(sys_platform == 'linux' and extra == 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "filelock", marker = "extra == 'group-7-lottery-cu130'" },
+    { name = "fsspec", marker = "extra == 'group-7-lottery-cu130'" },
+    { name = "jinja2", marker = "extra == 'group-7-lottery-cu130'" },
+    { name = "networkx", marker = "extra == 'group-7-lottery-cu130'" },
+    { name = "nvidia-cudnn-cu13", marker = "(sys_platform == 'linux' and extra == 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-cusparselt-cu13", marker = "(sys_platform == 'linux' and extra == 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-nccl-cu13", marker = "(sys_platform == 'linux' and extra == 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "nvidia-nvshmem-cu13", marker = "(sys_platform == 'linux' and extra == 'group-7-lottery-cu130') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "setuptools", marker = "extra == 'group-7-lottery-cu130'" },
+    { name = "sympy", marker = "extra == 'group-7-lottery-cu130'" },
+    { name = "triton", marker = "(python_full_version < '3.15' and sys_platform == 'linux' and extra == 'group-7-lottery-cu130') or (python_full_version >= '3.15' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (sys_platform != 'linux' and extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "typing-extensions", marker = "extra == 'group-7-lottery-cu130'" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.14.1%2Bcu130-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:6afc5e5944fb0bd927e08d32a11f71d19154001f1c81fa00a6ed81a217451795", upload-time = "2026-09-30T20:23:37Z" },
@@ -1259,18 +1268,37 @@ wheels = [
 [[package]]
 name = "torchvision"
 version = "0.29.1"
-source = { registry = "https://pypi.org/simple" }
+source = { registry = "https://download.pytorch.org/whl/cpu" }
 resolution-markers = [
-    "python_full_version >= '3.15' and sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
-    "python_full_version < '3.15' and sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
-    "python_full_version >= '3.15' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
-    "python_full_version < '3.15' and extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130'",
+    "python_full_version >= '3.15' and sys_platform == 'darwin'",
+    "python_full_version < '3.15' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "numpy", marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "pillow", marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130') or (extra != 'extra-7-lottery-cpu' and extra != 'extra-7-lottery-cu130')" },
+    { name = "numpy", marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "pillow", marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+]
+wheels = [
+    { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.29.1-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:3b6eb9d2f8fe9b93d9d37637749df361efeed133d96ddd503184a1b5b12bb27f", upload-time = "2026-09-30T15:46:12Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.29.1-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:b0b3de76f2ee5678b7950ba9971cf72d9c5887cd7993db61788552f371686fed", upload-time = "2026-09-30T15:46:12Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.29.1-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:c33cbd596afa13c24de752ead437eb5da48285efd6dc2a06543948821bfde57a", upload-time = "2026-09-30T15:46:12Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.29.1-cp314-cp314t-macosx_14_0_arm64.whl", hash = "sha256:8b26ff2c61cd1da60d74cf704cae6007bc38902a60d4a7068fe327db1cb45c62", upload-time = "2026-09-30T15:46:12Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.29.1-cp315-cp315-macosx_14_0_arm64.whl", hash = "sha256:81631181cff6389b76195c770dca6292321bffc6fd7954bb72dd690c39c7e375", upload-time = "2026-09-30T15:46:12Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.29.1-cp315-cp315t-macosx_14_0_arm64.whl", hash = "sha256:25fee78bd73f3a70fd8402959c6eea0fd164c05727c08bf4f59c73350653d7cc", upload-time = "2026-09-30T15:46:12Z" },
+]
+
+[[package]]
+name = "torchvision"
+version = "0.29.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.15'",
+    "python_full_version < '3.15'",
+]
+dependencies = [
+    { name = "numpy", marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "pillow", marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130') or (extra != 'group-7-lottery-cpu' and extra != 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f3/f8/855c7b326ed17a8dac4a03e8e6fec33ef6728e4baa00d816cf1227bb6681/torchvision-0.29.1-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:3b6eb9d2f8fe9b93d9d37637749df361efeed133d96ddd503184a1b5b12bb27f", size = 1813847, upload-time = "2026-09-30T17:57:01.009Z" },
@@ -1300,9 +1328,9 @@ resolution-markers = [
     "python_full_version < '3.15' and sys_platform != 'darwin'",
 ]
 dependencies = [
-    { name = "numpy", marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "pillow", marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
-    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-lottery-cpu') or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "numpy", marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "pillow", marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-7-lottery-cpu') or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cpu/torchvision-0.29.1%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:3058f855e65089330ec987b8cac1ccf5e7a26cd475f8cab20597b5577ddc8767", upload-time = "2026-09-30T15:46:11Z" },
@@ -1330,13 +1358,15 @@ name = "torchvision"
 version = "0.29.1+cu130"
 source = { registry = "https://download.pytorch.org/whl/cu130" }
 resolution-markers = [
-    "python_full_version >= '3.15'",
-    "python_full_version < '3.15'",
+    "(python_full_version >= '3.15' and sys_platform == 'linux') or (python_full_version >= '3.15' and sys_platform == 'win32')",
+    "(python_full_version < '3.15' and sys_platform == 'linux') or (python_full_version < '3.15' and sys_platform == 'win32')",
+    "python_full_version >= '3.15' and sys_platform != 'linux' and sys_platform != 'win32'",
+    "python_full_version < '3.15' and sys_platform != 'linux' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", marker = "extra == 'extra-7-lottery-cu130'" },
-    { name = "pillow", marker = "extra == 'extra-7-lottery-cu130'" },
-    { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-7-lottery-cu130'" },
+    { name = "numpy", marker = "extra == 'group-7-lottery-cu130'" },
+    { name = "pillow", marker = "extra == 'group-7-lottery-cu130'" },
+    { name = "torch", version = "2.14.1+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'group-7-lottery-cu130'" },
 ]
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.29.1%2Bcu130-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:3fe32cb76816c80355087a2e4d2a6d40ba01cc7b59a5732be57d1e71b4539f8e", upload-time = "2026-09-30T15:46:27Z" },
@@ -1364,7 +1394,7 @@ name = "tqdm"
 version = "4.70.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-7-lottery-cpu' and extra == 'extra-7-lottery-cu130')" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'group-7-lottery-cpu' and extra == 'group-7-lottery-cu130')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0d/ea/b2a5bd54b28a324dae8211928b2d730b6547500342c7e6c6dea08bd0a485/tqdm-4.70.1.tar.gz", hash = "sha256:cefd0eca11b2a37a3aee776544d4f4ae913f02688135b5556b8788dfa474afc4", size = 171846, upload-time = "2026-09-11T07:25:16.601Z" }
 wheels = [

@@ -5,6 +5,7 @@ import torch
 from torch import nn
 
 from lottery import (
+    CsvLogger,
     LayerwiseMagnitudePruning,
     Rewind,
     RoundResult,
@@ -19,7 +20,7 @@ from .conftest import ShiftTrainer, TinyNet
 
 def test_round_zero_trains_the_dense_network():
     trainer = ShiftTrainer()
-    ticket = WinningTicket(TinyNet(), trainer, progress=False)
+    ticket = WinningTicket(TinyNet(), trainer)
     result = ticket.search(rounds=0, epochs=2)
     assert [r.round for r in result.rounds] == [0]
     assert result.rounds[0].density == 1.0
@@ -27,7 +28,7 @@ def test_round_zero_trains_the_dense_network():
 
 
 def test_density_follows_the_prune_schedule():
-    ticket = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    ticket = WinningTicket(TinyNet(), ShiftTrainer())
     result = ticket.search(rounds=3, epochs=1, prune_fraction=0.2)
     assert [round(r.density, 2) for r in result.rounds] == [1.0, 0.8, 0.64, 0.51]
 
@@ -36,7 +37,7 @@ def test_survivors_are_rewound_to_the_original_init():
     """Regression: the old search re-drew a random init each round instead of rewinding to θ0."""
     model = TinyNet()
     initial = {k: v.clone() for k, v in model.state_dict().items()}
-    ticket = WinningTicket(model, ShiftTrainer(delta=1.0), progress=False)
+    ticket = WinningTicket(model, ShiftTrainer(delta=1.0))
 
     ticket.search(rounds=1, epochs=1)  # train, prune, rewind, train
     # ShiftTrainer added 3.0 to everything during the round-1 training. Undo that to see
@@ -53,7 +54,7 @@ def test_survivors_are_rewound_to_the_original_init():
 def test_late_rewinding_snapshots_the_weights_at_rewind_step():
     model = TinyNet()
     initial = model.fc1.weight.detach().clone()
-    ticket = WinningTicket(model, ShiftTrainer(delta=1.0), rewind_step=2, progress=False)
+    ticket = WinningTicket(model, ShiftTrainer(delta=1.0), rewind_step=2)
     assert ticket.rewind_state() is None
 
     ticket.search(rounds=1, epochs=1)
@@ -65,9 +66,7 @@ def test_late_rewinding_snapshots_the_weights_at_rewind_step():
 
 
 def test_late_rewind_step_beyond_the_dense_round_is_an_error():
-    ticket = WinningTicket(
-        TinyNet(), ShiftTrainer(steps_per_epoch=1), rewind_step=5, progress=False
-    )
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(steps_per_epoch=1), rewind_step=5)
     with pytest.raises(ValueError, match="never reached"):
         ticket.search(rounds=1, epochs=2)
 
@@ -75,7 +74,7 @@ def test_late_rewind_step_beyond_the_dense_round_is_an_error():
 def test_random_rewind_redraws_weights():
     model = TinyNet()
     initial = model.fc1.weight.detach().clone()
-    ticket = WinningTicket(model, ShiftTrainer(delta=0.0), rewind=Rewind.RANDOM, progress=False)
+    ticket = WinningTicket(model, ShiftTrainer(delta=0.0), rewind=Rewind.RANDOM)
     ticket.search(rounds=1, epochs=1)
     mask = model.fc1.weight_mask.bool()
     assert not torch.allclose(model.fc1.weight_orig[mask], initial[mask])
@@ -85,7 +84,7 @@ def test_random_rewind_redraws_weights():
 def test_no_rewind_keeps_trained_weights():
     model = TinyNet()
     initial = model.fc1.weight.detach().clone()
-    ticket = WinningTicket(model, ShiftTrainer(delta=1.0), rewind="none", progress=False)
+    ticket = WinningTicket(model, ShiftTrainer(delta=1.0), rewind="none")
     ticket.search(rounds=1, epochs=1)
     # 3 steps in round 0 + 3 steps in round 1, never reset
     assert torch.allclose(model.fc1.weight_orig, initial + 6.0)
@@ -93,7 +92,7 @@ def test_no_rewind_keeps_trained_weights():
 
 def test_search_continues_from_the_previous_call():
     trainer = ShiftTrainer()
-    ticket = WinningTicket(TinyNet(), trainer, progress=False)
+    ticket = WinningTicket(TinyNet(), trainer)
     ticket.search(rounds=1, epochs=1)
     result = ticket.search(rounds=2, epochs=1)
     assert [r.round for r in result.rounds] == [0, 1, 2, 3]
@@ -122,7 +121,6 @@ def test_search_to_density_reaches_target_with_uneven_strategy():
         TinyNet(),
         ShiftTrainer(),
         strategy=LayerwiseMagnitudePruning(output_layer_scale=0.5),
-        progress=False,
     )
     ticket.search_to_density(0.3, epochs=1, prune_fraction=0.2)
     assert ticket.density() <= 0.3
@@ -133,13 +131,13 @@ def test_search_to_density_fails_when_no_progress():
         def prune(self, parameters, fraction):
             pass
 
-    ticket = WinningTicket(TinyNet(), ShiftTrainer(), strategy=NoOp(), progress=False)
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(), strategy=NoOp())
     with pytest.raises(RuntimeError, match="no weights"):
         ticket.search_to_density(0.5, epochs=1)
 
 
 def test_search_to_density_stops_at_target():
-    ticket = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    ticket = WinningTicket(TinyNet(), ShiftTrainer())
     ticket.search_to_density(0.5, epochs=1, prune_fraction=0.2)
     assert ticket.density() <= 0.5
     assert ticket.rounds_completed == 1 + 4  # dense + ceil(log 0.5 / log 0.8)
@@ -153,14 +151,13 @@ def test_custom_strategy_is_used():
         TinyNet(),
         ShiftTrainer(),
         strategy=LayerwiseMagnitudePruning(output_layer_scale=0.0),
-        progress=False,
     )
     ticket.search(rounds=1, epochs=1, prune_fraction=0.5)
     assert [layer.density for layer in ticket.sparsity()] == [0.5, 1.0]
 
 
 def test_batchnorm_and_biases_are_never_pruned():
-    ticket = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    ticket = WinningTicket(TinyNet(), ShiftTrainer())
     ticket.search(rounds=2, epochs=1, prune_fraction=0.5)
     names = [layer.name for layer in ticket.sparsity()]
     assert names == ["fc1.weight", "fc2.weight"]
@@ -168,7 +165,7 @@ def test_batchnorm_and_biases_are_never_pruned():
 
 
 def test_masks_returns_copies():
-    ticket = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    ticket = WinningTicket(TinyNet(), ShiftTrainer())
     masks = ticket.masks()
     assert set(masks) == {"fc1.weight_mask", "fc2.weight_mask"}
     masks["fc1.weight_mask"].zero_()
@@ -176,14 +173,14 @@ def test_masks_returns_copies():
 
 
 def test_call_and_repr(tiny_net):
-    ticket = WinningTicket(tiny_net, ShiftTrainer(), progress=False)
+    ticket = WinningTicket(tiny_net, ShiftTrainer())
     tiny_net.eval()
     assert ticket(torch.randn(2, 8)).shape == (2, 3)
     assert repr(ticket) == "WinningTicket(density=1.0000, rounds=0)"
 
 
 def test_csv_output(tmp_path):
-    ticket = WinningTicket(TinyNet(), ShiftTrainer(), output_dir=tmp_path, progress=False)
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(), callbacks=[CsvLogger(tmp_path)])
     ticket.search(rounds=1, epochs=2)
     ticket.search(rounds=1, epochs=2)  # appends, does not truncate
 
@@ -204,7 +201,7 @@ def test_csv_output(tmp_path):
 
 def test_checkpoints_written_every_n_rounds(tmp_path):
     ticket = WinningTicket(
-        TinyNet(), ShiftTrainer(), output_dir=tmp_path, checkpoint_every=2, progress=False
+        TinyNet(), ShiftTrainer(), checkpoint_dir=tmp_path / "checkpoints", checkpoint_every=2
     )
     ticket.search(rounds=4, epochs=1)
     written = sorted(p.name for p in (tmp_path / "checkpoints").iterdir())
@@ -215,7 +212,8 @@ def test_checkpoints_written_every_n_rounds(tmp_path):
     ("kwargs", "match"),
     [
         ({"rewind_step": -1}, "rewind_step"),
-        ({"checkpoint_every": 1}, "output_dir"),
+        ({"checkpoint_every": 1}, "checkpoint_dir"),
+        ({"checkpoint_every": 0, "checkpoint_dir": "x"}, "checkpoint_every"),
         ({"rewind": "sideways"}, "sideways"),
         ({"rewind": "random", "rewind_step": 3}, "only applies"),
     ],
@@ -232,7 +230,7 @@ def test_model_without_prunable_parameters_rejected():
 
 @pytest.mark.parametrize(("rounds", "epochs"), [(-1, 1), (1, 0)])
 def test_search_validation(rounds, epochs):
-    ticket = WinningTicket(TinyNet(), ShiftTrainer(), progress=False)
+    ticket = WinningTicket(TinyNet(), ShiftTrainer())
     with pytest.raises(ValueError, match="must be >="):
         ticket.search(rounds=rounds, epochs=epochs)
 
@@ -257,15 +255,32 @@ def test_best_edge_cases():
         SearchResult([]).best()
     with pytest.raises(ValueError, match="dense round"):
         SearchResult([_round(3, 0.5, 0.9)]).best()
-    assert SearchResult([_round(0, 1.0, float("nan")), _round(1, 0.8, 0.5)]).best().round == 0
-    assert SearchResult([_round(0, 1.0, None)]).best().round == 0
+    with pytest.raises(ValueError, match="no score"):
+        SearchResult([_round(0, 1.0, float("nan")), _round(1, 0.8, 0.5)]).best()
+    with pytest.raises(ValueError, match="no score"):
+        SearchResult([_round(0, 1.0, None)]).best()
     assert _round(0, 1.0, None).final_test is None
+
+
+def test_best_tolerance_and_metric_are_configurable():
+    rounds = [_round(0, 1.0, 90.0), _round(1, 0.8, 89.7), _round(2, 0.64, 89.0)]
+    assert SearchResult(rounds).best().round == 0, "0.005 is a fraction, not percentage points"
+    assert SearchResult(rounds).best(tolerance=0.5).round == 1
+
+    quantised = [
+        RoundResult(r.round, r.density, r.epochs, [], {"quantised": Metrics(0.0, q)})
+        for r, q in zip(rounds, [0.9, 0.9, 0.5], strict=True)
+    ]
+    best = SearchResult(quantised).best(
+        tolerance=0.1, metric=lambda r: r.extra_metrics["quantised"].accuracy
+    )
+    assert best.round == 1, "round 2 is within tolerance on test acc but not on int8 acc"
 
 
 def test_end_to_end_with_real_training(trainer):
     model = nn.Sequential(nn.Linear(8, 32), nn.ReLU(), nn.Linear(32, 3))
     initial = model[0].weight.detach().clone()
-    ticket = WinningTicket(model, trainer, progress=False)
+    ticket = WinningTicket(model, trainer)
     result = ticket.search(rounds=2, epochs=2, prune_fraction=0.5)
 
     assert len(result.rounds) == 3
@@ -274,3 +289,89 @@ def test_end_to_end_with_real_training(trainer):
     snapshot = ticket.rewind_state()
     assert snapshot is not None
     assert torch.equal(snapshot["0.weight_orig"], initial)
+
+
+@pytest.mark.parametrize("fraction", [0.0, 1.0, 20])
+def test_bad_prune_fraction_rejected_before_any_training(fraction):
+    trainer = ShiftTrainer()
+    ticket = WinningTicket(TinyNet(), trainer)
+    with pytest.raises(ValueError, match="prune_fraction"):
+        ticket.search(rounds=2, epochs=1, prune_fraction=fraction)
+    assert trainer.fit_calls == []
+    assert ticket.rounds_completed == 0
+
+
+def test_unreachable_rewind_step_rejected_before_training(trainer, classification_data):
+    def fit(*args, **kwargs):
+        raise AssertionError("trained before checking rewind_step")
+
+    trainer.fit = fit
+    steps = 2 * len(classification_data)
+    ticket = WinningTicket(TinyNet(), trainer, rewind_step=steps + 1)
+    with pytest.raises(ValueError, match=f"only {steps} steps"):
+        ticket.search(rounds=1, epochs=2)
+
+
+def test_final_round_of_each_search_is_checkpointed(tmp_path):
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(), checkpoint_dir=tmp_path, checkpoint_every=2)
+    ticket.search(rounds=3, epochs=1)
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "round_000.pt",
+        "round_002.pt",
+        "round_003.pt",
+    ]
+
+
+def test_checkpoint_dir_alone_saves_the_end_of_each_search(tmp_path):
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(), checkpoint_dir=tmp_path)
+    ticket.search(rounds=2, epochs=1)
+    ticket.search_to_density(0.5, epochs=1)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["round_002.pt", "round_004.pt"]
+
+
+def test_random_rewind_redraws_any_parameter_with_its_layers_own_init():
+    model = TinyNet()
+    bias_before = model.fc1.bias.detach().clone()
+    ticket = WinningTicket(
+        model,
+        ShiftTrainer(delta=0.0),
+        parameters=lambda m: [(m.fc1, "weight"), (m.fc1, "bias")],
+        rewind="random",
+    )
+    ticket.search(rounds=1, epochs=1, prune_fraction=0.5)
+    alive = model.fc1.bias_mask.bool()
+    assert not torch.allclose(model.fc1.bias_orig[alive], bias_before[alive])
+    bound = 1 / 8**0.5  # nn.Linear's default bias init for 8 inputs
+    assert model.fc1.bias_orig.abs().max() <= bound
+
+
+def test_random_rewind_needs_reset_parameters():
+    class Raw(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.randn(4, 4))
+
+        def forward(self, x):
+            return x @ self.weight
+
+    model = nn.Sequential(Raw())
+    with pytest.raises(ValueError, match="reset_parameters"):
+        WinningTicket(
+            model, ShiftTrainer(), parameters=lambda m: [(m[0], "weight")], rewind="random"
+        )
+
+
+def test_masks_and_rewind_state_tell_pruning_masks_from_other_buffers():
+    from .test_pruning import WithMaskBuffer
+
+    ticket = WinningTicket(WithMaskBuffer(), ShiftTrainer())
+    assert set(ticket.masks()) == {"fc.weight_mask"}
+    snapshot = ticket.rewind_state()
+    assert snapshot is not None
+    assert "attention_mask" in snapshot, "a user buffer must be rewound like any other state"
+    assert "fc.weight_mask" not in snapshot
+
+
+def test_masks_of_a_bare_layer():
+    ticket = WinningTicket(nn.Linear(4, 4), ShiftTrainer())
+    assert set(ticket.masks()) == {"weight_mask"}

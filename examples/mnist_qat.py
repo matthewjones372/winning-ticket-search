@@ -3,7 +3,7 @@
 Each round trains the fake-quantised network and also reports the accuracy of the
 truly int8-quantised model.
 
-    uv run --extra cpu --extra qat python examples/mnist_qat.py --rounds 5 --epochs 3
+    uv run --group cpu --extra vision --extra qat python examples/mnist_qat.py --rounds 5 --epochs 3
 """
 
 import argparse
@@ -12,7 +12,7 @@ import logging
 from _data import mnist
 from torch import nn
 
-from lottery import ClassificationTrainer, adam
+from lottery import ClassificationTrainer, CsvLogger, ProgressBar, adam
 from lottery.models import LeNet300100
 from lottery.qat import QatWinningTicket
 
@@ -23,23 +23,22 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--output", default="results/mnist_qat")
+    parser.add_argument(
+        "--fake-data", action="store_true", help="random images instead of downloading"
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    train_loader, test_loader = mnist(limit=args.limit)
+    train_loader, test_loader = mnist(limit=args.limit, fake=args.fake_data)
     # The default int8 config runs on CPU; pass base_config= for GPU int4/fp8 schemes.
     trainer = ClassificationTrainer(
         nn.CrossEntropyLoss(), train_loader, test_loader, optimiser=adam(lr=1.2e-3)
     )
-    ticket = QatWinningTicket(LeNet300100(), trainer, output_dir=args.output)
-    result = ticket.search(rounds=args.rounds, epochs=args.epochs)
-
-    for r in result.rounds:
-        q = r.extra_metrics["quantised"]
-        print(
-            f"round {r.round:2d}  density {r.density:6.2%}  "
-            f"fake-quant acc {r.final_test.accuracy:.4f}  int8 acc {q.accuracy:.4f}"
-        )
+    ticket = QatWinningTicket(
+        LeNet300100(), trainer, callbacks=[ProgressBar(), CsvLogger(args.output)]
+    )
+    # Each round's log line carries the fake-quantised and the real int8 accuracy.
+    ticket.search(rounds=args.rounds, epochs=args.epochs)
 
 
 if __name__ == "__main__":
