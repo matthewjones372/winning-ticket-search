@@ -41,7 +41,6 @@ def test_convert_preserves_sparsity_and_leaves_source_untouched():
     model = prepare_qat(TinyNet())
     params = default_prunable_parameters(model)
     GlobalMagnitudePruning().prune(params, 0.5)
-    pruned_before = int((model.fc1.weight_mask == 0).sum())
     model.eval()
 
     quantised = convert_qat(model)
@@ -49,7 +48,7 @@ def test_convert_preserves_sparsity_and_leaves_source_untouched():
     weight = quantised.fc1.weight
     assert type(quantised.fc1) is nn.Linear
     assert type(weight).__name__ == "IntxUnpackedToInt8Tensor"
-    assert int((weight.qdata == 0).sum()) >= pruned_before
+    assert torch.all(weight.qdata[model.fc1.weight_mask == 0] == 0)
     assert hasattr(model.fc1, "weight_mask"), "source model must keep its masks"
     x = torch.randn(4, 8)
     assert torch.allclose(quantised(x), model(x), atol=0.2)
@@ -60,6 +59,19 @@ def test_qat_ticket_records_quantised_metrics():
     result = ticket.search(rounds=1, epochs=1)
     assert all("quantised" in r.extra_metrics for r in result.rounds)
     assert result.rounds[-1].density == pytest.approx(0.8, abs=0.01)
+
+
+def test_quantised_model_is_evaluated_on_the_quantised_device():
+    devices = []
+
+    class Spy(ShiftTrainer):
+        def evaluate(self, model, device=None):
+            devices.append(device)
+            return super().evaluate(model, device)
+
+    QatWinningTicket(TinyNet(), Spy(delta=0.0)).search(rounds=0, epochs=1)
+    QatWinningTicket(TinyNet(), Spy(delta=0.0), quantised_device="meta").search(rounds=0, epochs=1)
+    assert devices == [torch.device("cpu"), torch.device("meta")]
 
 
 def test_qat_ticket_can_skip_quantised_eval():

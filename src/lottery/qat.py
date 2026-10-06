@@ -82,7 +82,9 @@ class QatWinningTicket(WinningTicket):
 
     The trainer trains and evaluates the fake-quantised model. When
     ``evaluate_quantised`` is set, each round also converts a copy to a real quantised
-    model and records its test metrics under ``extra_metrics["quantised"]``.
+    model and records its test metrics under ``extra_metrics["quantised"]``, evaluated
+    on ``quantised_device``. That defaults to CPU, where the default int8 config runs;
+    set it to ``"cuda"`` for GPU schemes such as int4 weight-only.
     """
 
     def __init__(
@@ -93,9 +95,11 @@ class QatWinningTicket(WinningTicket):
         base_config: AOBaseConfig | None = None,
         filter_fn: ModuleFilter | None = None,
         evaluate_quantised: bool = True,
+        quantised_device: torch.device | str = "cpu",
         **kwargs: Any,
     ) -> None:
         self.base_config = base_config or default_qat_config()
+        self.quantised_device = torch.device(quantised_device)
         self.filter_fn = filter_fn
         self.evaluate_quantised = evaluate_quantised
         prepare_qat(model, self.base_config, filter_fn)
@@ -107,4 +111,4 @@ class QatWinningTicket(WinningTicket):
     def _round_metrics(self) -> dict[str, Metrics]:
         if not self.evaluate_quantised:
             return {}
-        return {"quantised": self.trainer.evaluate(self.quantised_model())}
+        return {"quantised": self.trainer.evaluate(self.quantised_model(), self.quantised_device)}

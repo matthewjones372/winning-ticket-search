@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -64,22 +65,39 @@ class RoundResult:
 class SearchResult:
     rounds: list[RoundResult]
 
-    def best(self) -> RoundResult:
-        """The sparsest round whose final test accuracy is within 0.5 points of the dense run."""
+    def best(
+        self,
+        tolerance: float = 0.005,
+        metric: Callable[[RoundResult], float | None] | None = None,
+    ) -> RoundResult:
+        """The sparsest round scoring within ``tolerance`` of the dense round (round 0).
+
+        ``metric`` scores a round, higher is better; it defaults to the final epoch's test
+        accuracy, and ``tolerance`` is in its units (0.005 is half a point of a 0-1
+        accuracy). For a QAT search, score the real quantised model with
+        ``metric=lambda r: r.extra_metrics["quantised"].accuracy``.
+
+        Picking rounds by the same data you report on is optimistic. If that matters,
+        give the trainer a validation loader as ``test_loader`` and evaluate the chosen
+        ticket on held-out data afterwards.
+        """
         if not self.rounds:
             raise ValueError("no rounds recorded")
+        score = metric or _final_test_accuracy
         dense = next((r for r in self.rounds if r.round == 0), None)
         if dense is None:
             raise ValueError("the dense round (round 0) is not in this result")
-        baseline = dense.final_test
-        if baseline is None or math.isnan(baseline.accuracy):
-            return dense
+        baseline = score(dense)
+        if baseline is None or math.isnan(baseline):
+            raise ValueError("the dense round has no score to compare the others against")
         eligible = [
-            r
-            for r in self.rounds
-            if r.final_test and r.final_test.accuracy >= baseline.accuracy - 0.005
+            r for r in self.rounds if (s := score(r)) is not None and s >= baseline - tolerance
         ]
         return min(eligible, key=lambda r: r.density)
+
+
+def _final_test_accuracy(result: RoundResult) -> float | None:
+    return result.final_test.accuracy if result.final_test is not None else None
 
 
 def rounds_for_density(target_density: float, prune_fraction: float) -> int:
@@ -141,6 +159,13 @@ class WinningTicket:
         self.parameters: list[PrunableParameter] = list(parameters(model))
         if not self.parameters:
             raise ValueError("model has no prunable parameters")
+        if self.rewind is Rewind.RANDOM:
+            for module, name in self.parameters:
+                if not callable(getattr(module, "reset_parameters", None)):
+                    raise ValueError(
+                        f"rewind='random' re-draws {type(module).__name__}.{name} with the "
+                        "module's own reset_parameters(), which it does not have"
+                    )
         attach_masks(self.parameters)
         self._rewind_state: StateDict | None = None
         if self.rewind is Rewind.WEIGHTS and rewind_step == 0:
@@ -217,6 +242,7 @@ class WinningTicket:
             rewind_state=self._rewind_state,
             rounds_completed=self.rounds_completed,
             history=[_round_to_dict(r) for r in self.history],
+            config=self._config(),
         )
 
     def load(self, path: str | Path, map_location: torch.device | str | None = None) -> None:
@@ -239,9 +265,20 @@ class WinningTicket:
             raise ValueError(
                 "checkpoint has no rewind state, so it cannot resume a rewind='weights' search"
             )
+        if len(checkpoint.history) != checkpoint.rounds_completed:
+            raise ValueError(
+                f"checkpoint has {len(checkpoint.history)} rounds of history but "
+                f"rounds_completed={checkpoint.rounds_completed}, so it cannot resume a search"
+            )
+        if checkpoint.config is not None:
+            self._check_config(checkpoint.config)
         self._rewind_state = checkpoint.rewind_state
         self.rounds_completed = checkpoint.rounds_completed
         self.history = [_round_from_dict(r) for r in checkpoint.history]
+        if checkpoint.rng_state is not None:
+            # So the rounds after a resume draw the same random numbers as an uninterrupted
+            # run would (random re-init, shuffling); CUDA generators are not restored.
+            torch.set_rng_state(checkpoint.rng_state.cpu())
 
     def __call__(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.model(inputs)  # type: ignore[no-any-return]
@@ -256,6 +293,28 @@ class WinningTicket:
         return {}
 
     # ------------------------------------------------------------------ internals
+
+    def _config(self) -> dict[str, Any]:
+        return {
+            "rewind": str(self.rewind),
+            "rewind_step": self.rewind_step,
+            "strategy": type(self.strategy).__qualname__,
+        }
+
+    def _check_config(self, saved: dict[str, Any]) -> None:
+        mine = self._config()
+        if (saved["rewind"], saved["rewind_step"]) != (mine["rewind"], mine["rewind_step"]):
+            raise ValueError(
+                f"checkpoint was saved with rewind='{saved['rewind']}', "
+                f"rewind_step={saved['rewind_step']}, but this ticket uses "
+                f"rewind='{mine['rewind']}', rewind_step={mine['rewind_step']}"
+            )
+        if saved["strategy"] != mine["strategy"]:
+            warnings.warn(
+                f"checkpoint was pruned with {saved['strategy']}, "
+                f"this ticket continues with {mine['strategy']}",
+                stacklevel=3,
+            )
 
     def _run(
         self,
@@ -358,12 +417,12 @@ class WinningTicket:
                         state[key].copy_(value)
             case Rewind.RANDOM:
                 with torch.no_grad():
-                    # reset_parameters() re-draws biases and norm layers, but on a pruned
-                    # module `weight` is a derived tensor, so re-draw `weight_orig` directly
-                    # with the same default init PyTorch uses for linear and conv layers.
+                    # On a pruned module `weight` is a derived tensor, so reset_parameters()
+                    # re-draws that rather than the `weight_orig` parameter training updates.
+                    # Copy each fresh draw across, whatever the layer's own init is.
                     _reset_parameters(self.model)
                     for module, name in self.parameters:
-                        nn.init.kaiming_uniform_(getattr(module, f"{name}_orig"), a=math.sqrt(5))
+                        getattr(module, f"{name}_orig").copy_(getattr(module, name))
             case Rewind.NONE:
                 pass
 

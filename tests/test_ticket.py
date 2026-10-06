@@ -255,9 +255,26 @@ def test_best_edge_cases():
         SearchResult([]).best()
     with pytest.raises(ValueError, match="dense round"):
         SearchResult([_round(3, 0.5, 0.9)]).best()
-    assert SearchResult([_round(0, 1.0, float("nan")), _round(1, 0.8, 0.5)]).best().round == 0
-    assert SearchResult([_round(0, 1.0, None)]).best().round == 0
+    with pytest.raises(ValueError, match="no score"):
+        SearchResult([_round(0, 1.0, float("nan")), _round(1, 0.8, 0.5)]).best()
+    with pytest.raises(ValueError, match="no score"):
+        SearchResult([_round(0, 1.0, None)]).best()
     assert _round(0, 1.0, None).final_test is None
+
+
+def test_best_tolerance_and_metric_are_configurable():
+    rounds = [_round(0, 1.0, 90.0), _round(1, 0.8, 89.7), _round(2, 0.64, 89.0)]
+    assert SearchResult(rounds).best().round == 0, "0.005 is a fraction, not percentage points"
+    assert SearchResult(rounds).best(tolerance=0.5).round == 1
+
+    quantised = [
+        RoundResult(r.round, r.density, r.epochs, [], {"quantised": Metrics(0.0, q)})
+        for r, q in zip(rounds, [0.9, 0.9, 0.5], strict=True)
+    ]
+    best = SearchResult(quantised).best(
+        tolerance=0.1, metric=lambda r: r.extra_metrics["quantised"].accuracy
+    )
+    assert best.round == 1, "round 2 is within tolerance on test acc but not on int8 acc"
 
 
 def test_end_to_end_with_real_training(trainer):
@@ -310,3 +327,35 @@ def test_checkpoint_dir_alone_saves_the_end_of_each_search(tmp_path):
     ticket.search(rounds=2, epochs=1)
     ticket.search_to_density(0.5, epochs=1)
     assert sorted(p.name for p in tmp_path.iterdir()) == ["round_002.pt", "round_004.pt"]
+
+
+def test_random_rewind_redraws_any_parameter_with_its_layers_own_init():
+    model = TinyNet()
+    bias_before = model.fc1.bias.detach().clone()
+    ticket = WinningTicket(
+        model,
+        ShiftTrainer(delta=0.0),
+        parameters=lambda m: [(m.fc1, "weight"), (m.fc1, "bias")],
+        rewind="random",
+    )
+    ticket.search(rounds=1, epochs=1, prune_fraction=0.5)
+    alive = model.fc1.bias_mask.bool()
+    assert not torch.allclose(model.fc1.bias_orig[alive], bias_before[alive])
+    bound = 1 / 8**0.5  # nn.Linear's default bias init for 8 inputs
+    assert model.fc1.bias_orig.abs().max() <= bound
+
+
+def test_random_rewind_needs_reset_parameters():
+    class Raw(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.randn(4, 4))
+
+        def forward(self, x):
+            return x @ self.weight
+
+    model = nn.Sequential(Raw())
+    with pytest.raises(ValueError, match="reset_parameters"):
+        WinningTicket(
+            model, ShiftTrainer(), parameters=lambda m: [(m[0], "weight")], rewind="random"
+        )

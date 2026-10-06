@@ -40,6 +40,13 @@ result = ticket.search_to_density(0.05, epochs=5)
 
 best = result.best()  # sparsest round within 0.5 points of the dense accuracy
 print(best.round, best.density, best.final_test)
+result.best(tolerance=0.01)  # or score rounds your own way with metric=...
+```
+
+`best()` picks by the trainer's `test_loader`. If you report on that same data, give the
+trainer a validation loader instead and evaluate the chosen ticket on held-out data.
+
+```python
 ```
 
 ### Pruning strategy
@@ -60,7 +67,7 @@ normalisation layers are left alone. Pass `parameters=` to pick your own.
 ```python
 WinningTicket(model, trainer)  # rewind to init (the original LTH procedure)
 WinningTicket(model, trainer, rewind_step=500)  # late rewinding, needed for deeper conv nets
-WinningTicket(model, trainer, rewind="random")  # random re-init control
+WinningTicket(model, trainer, rewind="random")  # random re-init with each layer's own init
 WinningTicket(model, trainer, rewind="none")  # keep trained weights, restart the LR schedule
 ```
 
@@ -78,6 +85,13 @@ int8_model = ticket.quantised_model()
 Any base config torchao's `QATConfig` accepts can be passed as `base_config=`, for
 example `Int4WeightOnlyConfig` for GPU inference. Symmetric weight schemes (the default)
 keep pruned weights exactly zero after conversion; asymmetric ones may not.
+
+The int8 model is evaluated on CPU, where the default config runs. Pass
+`quantised_device="cuda"` for GPU schemes. To pick the ticket by its quantised accuracy:
+
+```python
+result.best(metric=lambda r: r.extra_metrics["quantised"].accuracy)
+```
 
 ### Logging, progress and metrics
 
@@ -130,8 +144,11 @@ resumed.search(rounds=5, epochs=5)  # carries on pruning
 With `checkpoint_dir` set, the last round of every `search` call is saved too, and
 `checkpoint_every=n` also saves every *n*th round along the way.
 Checkpoints are plain `state_dict`s plus the round history, and load with
-`torch.load(weights_only=True)`. A `CsvLogger` pointed at the directory of a resumed
-run keeps the rows for the rounds already in the checkpoint and drops any after it.
+`torch.load(weights_only=True)`. They also record the rewind settings, which must match
+on resume, the pruning strategy (a mismatch warns) and the CPU RNG state, which `load`
+restores so a resumed `rewind="random"` search draws the same weights. A `CsvLogger`
+pointed at the directory of a resumed run keeps the rows for the rounds already in the
+checkpoint and drops any after it.
 
 ## Examples
 

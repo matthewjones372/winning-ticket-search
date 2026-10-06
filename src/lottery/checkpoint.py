@@ -1,8 +1,9 @@
 """Plain ``state_dict`` checkpoints (TorchScript is in maintenance mode upstream).
 
 A checkpoint stores the pruned model's state (``*_orig`` weights plus ``*_mask``
-buffers), the rewind snapshot and the number of completed rounds. Everything is a
-tensor or a primitive, so it loads with ``torch.load(weights_only=True)``.
+buffers), the rewind snapshot, the number of completed rounds, the round history, the
+search settings that must match on resume and the CPU RNG state. Everything is a tensor
+or a primitive, so it loads with ``torch.load(weights_only=True)``.
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ from torch import nn
 
 from lottery.pruning import ParameterSelector, attach_masks, default_prunable_parameters
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+READABLE_VERSIONS = (1, 2)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +26,10 @@ class Checkpoint:
     rounds_completed: int
     rewind_state: dict[str, torch.Tensor] | None
     history: list[dict[str, Any]] = field(default_factory=list)
+    config: dict[str, Any] | None = None
+    """The search settings it was saved with; ``None`` for version 1 checkpoints."""
+    rng_state: torch.Tensor | None = None
+    """``torch.get_rng_state()`` at save time; ``None`` for version 1 checkpoints."""
 
 
 def save_checkpoint(
@@ -33,6 +39,7 @@ def save_checkpoint(
     rewind_state: dict[str, torch.Tensor] | None,
     rounds_completed: int,
     history: list[dict[str, Any]] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,6 +50,8 @@ def save_checkpoint(
             "rewind_state": rewind_state,
             "rounds_completed": rounds_completed,
             "history": history or [],
+            "config": config,
+            "rng_state": torch.get_rng_state(),
         },
         path,
     )
@@ -59,7 +68,7 @@ def load_checkpoint(
     """Restore weights and masks into ``model`` (built with the same architecture)."""
     payload = torch.load(Path(path), map_location=map_location, weights_only=True)
     version = payload.get("format_version")
-    if version != FORMAT_VERSION:
+    if version not in READABLE_VERSIONS:
         raise ValueError(f"unsupported checkpoint format version: {version!r}")
     attach_masks(list(parameters(model)))
     model.load_state_dict(payload["model"])
@@ -67,4 +76,6 @@ def load_checkpoint(
         rounds_completed=int(payload["rounds_completed"]),
         rewind_state=payload["rewind_state"],
         history=list(payload.get("history", [])),
+        config=payload.get("config"),
+        rng_state=payload.get("rng_state"),
     )
