@@ -12,7 +12,7 @@ It supports:
 - rewinding to the original init, late rewinding to step *k* ([Frankle et al. 2020](https://arxiv.org/abs/1912.05671)), random re-init as a control, or no rewind (learning-rate rewinding, [Renda et al. 2020](https://arxiv.org/abs/2003.02389))
 - quantisation-aware training through [torchao](https://github.com/pytorch/ao), with the real int8 model evaluated every round
 - per-round CSV metrics, per-layer sparsity, and resumable `state_dict` checkpoints
-- a silent library: standard `logging`, plus opt-in callbacks for progress bars and CSV files
+- no output by default: standard `logging`, plus opt-in callbacks for progress bars and CSV files
 
 ## Quick start
 
@@ -45,9 +45,6 @@ result.best(tolerance=0.01)  # or score rounds your own way with metric=...
 
 `best()` picks by the trainer's `test_loader`. If you report on that same data, give the
 trainer a validation loader instead and evaluate the chosen ticket on held-out data.
-
-```python
-```
 
 ### Pruning strategy
 
