@@ -38,6 +38,7 @@ from lottery.training import (
     EpochReportingTrainer,
     EpochResult,
     Metrics,
+    ResumableTrainer,
     StepCallback,
     Trainer,
 )
@@ -214,6 +215,7 @@ class WinningTicket:
             self._rewind_state = self._snapshot()
         self.rounds_completed = 0
         self.history: list[RoundResult] = []
+        self._warned_full_schedule = False
 
     # ------------------------------------------------------------------ public API
 
@@ -377,7 +379,11 @@ class WinningTicket:
         try:
             while keep_going():
                 for callback in self.callbacks:
-                    callback.on_round_start(self, self.rounds_completed, epochs)
+                    callback.on_round_start(
+                        self,
+                        self.rounds_completed,
+                        self._epochs_to_train(self.rounds_completed, epochs),
+                    )
                 result = self._train_round(self.rounds_completed, epochs, prune_fraction)
                 for callback in self.callbacks:
                     callback.on_round_end(self, result)
@@ -433,18 +439,44 @@ class WinningTicket:
         if step == self.rewind_step and self._rewind_state is None:
             self._rewind_state = self._snapshot()
 
+    def _start_step(self, round_: int) -> int:
+        """Late rewinding resumes the schedule at the rewind step (Frankle et al. 2020)."""
+        late = self.rewind is Rewind.WEIGHTS and self.rewind_step > 0 and round_ > 0
+        return self.rewind_step if late else 0
+
+    def _epochs_to_train(self, round_: int, epochs: int) -> int:
+        start_step, steps = self._start_step(round_), _steps_per_epoch(self.trainer)
+        if start_step and steps and _fit_accepts(self.trainer, "start_step"):
+            return epochs - start_step // steps
+        return epochs
+
     def _fit(
         self, round_: int, epochs: int, on_step: StepCallback | None = None
     ) -> list[EpochResult]:
         trainer = self.trainer
-        if not (self.callbacks and _reports_epochs(trainer)):
-            return trainer.fit(self.model, epochs, on_step=on_step)
+        start_step = self._start_step(round_)
+        on_epoch = None
+        if self.callbacks:
 
-        def on_epoch(result: EpochResult) -> None:
-            for callback in self.callbacks:
-                callback.on_epoch_end(self, round_, result)
+            def on_epoch(result: EpochResult) -> None:
+                for callback in self.callbacks:
+                    callback.on_epoch_end(self, round_, result)
 
-        return trainer.fit(self.model, epochs, on_step=on_step, on_epoch=on_epoch)
+        if _is_resumable(trainer):
+            return trainer.fit(
+                self.model, epochs, on_step=on_step, on_epoch=on_epoch, start_step=start_step
+            )
+        if start_step and not self._warned_full_schedule:
+            self._warned_full_schedule = True
+            warnings.warn(
+                f"{type(trainer).__name__}.fit takes no start_step, so after rewinding to "
+                f"step {self.rewind_step} each round replays the whole schedule instead of "
+                "resuming at that step as late rewinding (Frankle et al. 2020) does",
+                stacklevel=4,
+            )
+        if on_epoch is not None and _reports_epochs(trainer):
+            return trainer.fit(self.model, epochs, on_step=on_step, on_epoch=on_epoch)
+        return trainer.fit(self.model, epochs, on_step=on_step)
 
     def _fit_capturing_late_snapshot(self, round_: int, epochs: int) -> list[EpochResult]:
         steps = _steps_per_epoch(self.trainer)
@@ -543,15 +575,23 @@ def _steps_per_epoch(trainer: Trainer) -> int | None:
         return None
 
 
-def _reports_epochs(trainer: Trainer) -> TypeGuard[EpochReportingTrainer]:
-    """Whether ``trainer.fit`` takes an ``on_epoch`` callback (it is optional; see Trainer)."""
+def _fit_accepts(trainer: Trainer, *names: str) -> bool:
+    """Whether ``trainer.fit`` takes these optional keywords (see Trainer)."""
     try:
         parameters = inspect.signature(trainer.fit).parameters
     except (TypeError, ValueError):
         return False
-    return "on_epoch" in parameters or any(
-        p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()
-    )
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+        return True
+    return all(name in parameters for name in names)
+
+
+def _reports_epochs(trainer: Trainer) -> TypeGuard[EpochReportingTrainer]:
+    return _fit_accepts(trainer, "on_epoch")
+
+
+def _is_resumable(trainer: Trainer) -> TypeGuard[ResumableTrainer]:
+    return _fit_accepts(trainer, "on_epoch", "start_step")
 
 
 def _describe(result: RoundResult) -> str:

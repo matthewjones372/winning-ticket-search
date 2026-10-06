@@ -460,9 +460,9 @@ def test_random_rewind_with_reinit_redraws_every_parameter():
     trained_once = None
 
     class Spy(ShiftTrainer):
-        def fit(self, model, epochs, on_step=None, on_epoch=None):
+        def fit(self, model, epochs, on_step=None, on_epoch=None, start_step=0):
             nonlocal trained_once
-            results = super().fit(model, epochs, on_step, on_epoch)
+            results = super().fit(model, epochs, on_step, on_epoch, start_step)
             if trained_once is None:
                 trained_once = tensor(model.attn, "in_proj_weight").detach().clone()
             return results
@@ -490,3 +490,46 @@ def test_reinit_must_match_the_architecture():
 def test_reinit_only_applies_to_random_rewind():
     with pytest.raises(ValueError, match="reinit"):
         WinningTicket(TinyNet(), ShiftTrainer(), reinit=TinyNet)
+
+
+def test_late_rewinding_resumes_training_at_the_rewind_step():
+    """Frankle et al. 2020: rewind to W_k, then train the remaining T - k steps."""
+    starts: list[int] = []
+
+    class Spy(ShiftTrainer):
+        def fit(self, model, epochs, on_step=None, on_epoch=None, start_step=0):
+            starts.append(start_step)
+            return super().fit(model, epochs, on_step, on_epoch, start_step)
+
+    WinningTicket(TinyNet(), Spy(), rewind_step=2).search(rounds=2, epochs=2)
+    assert starts == [0, 2, 2]
+
+
+@pytest.mark.parametrize("rewind", ["weights", "none", "random"])
+def test_other_rewinds_train_the_whole_schedule(rewind):
+    starts: list[int] = []
+
+    class Spy(ShiftTrainer):
+        def fit(self, model, epochs, on_step=None, on_epoch=None, start_step=0):
+            starts.append(start_step)
+            return super().fit(model, epochs, on_step, on_epoch, start_step)
+
+    WinningTicket(TinyNet(), Spy(), rewind=rewind).search(rounds=2, epochs=1)
+    assert starts == [0, 0, 0]
+
+
+def test_trainer_without_start_step_warns_once_about_late_rewinding():
+    class OldTrainer:
+        def __init__(self):
+            self._inner = ShiftTrainer()
+
+        def fit(self, model, epochs, on_step=None):
+            return self._inner.fit(model, epochs, on_step)
+
+        def evaluate(self, model, device=None):
+            return self._inner.evaluate(model, device)
+
+    ticket = WinningTicket(TinyNet(), OldTrainer(), rewind_step=2)
+    with pytest.warns(UserWarning, match="start_step") as caught:
+        ticket.search(rounds=2, epochs=1)
+    assert len([w for w in caught if "start_step" in str(w.message)]) == 1

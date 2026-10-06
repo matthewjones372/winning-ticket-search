@@ -62,12 +62,16 @@ class ShiftTrainer:
         epochs: int,
         on_step: StepCallback | None = None,
         on_epoch: EpochCallback | None = None,
+        start_step: int = 0,
     ) -> list[EpochResult]:
         self.fit_calls.append(epochs)
         step = 0
         results = []
         for epoch in range(epochs):
             for _ in range(self.steps_per_epoch):
+                if step < start_step:
+                    step += 1
+                    continue
                 with torch.no_grad():
                     for p in model.parameters():
                         p.add_(self.delta)

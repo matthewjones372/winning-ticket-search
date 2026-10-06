@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import itertools
 import logging
+import warnings
 from collections.abc import Callable, Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass, field
@@ -73,6 +75,24 @@ class EpochReportingTrainer(Trainer, Protocol):
     ) -> list[EpochResult]: ...
 
 
+class ResumableTrainer(EpochReportingTrainer, Protocol):
+    """A trainer that can also start part-way through its schedule.
+
+    Late rewinding (Frankle et al. 2020) resets the weights to those from step ``k`` and
+    trains the remaining steps with the learning-rate schedule where it was at step
+    ``k``. ``start_step=k`` asks ``fit`` for exactly that.
+    """
+
+    def fit(
+        self,
+        model: nn.Module,
+        epochs: int,
+        on_step: StepCallback | None = None,
+        on_epoch: EpochCallback | None = None,
+        start_step: int = 0,
+    ) -> list[EpochResult]: ...
+
+
 def sgd(lr: float = 0.01, momentum: float = 0.9, weight_decay: float = 5e-4) -> OptimiserFactory:
     """``torch.optim.SGD`` with these settings. Shorthand for ``functools.partial``."""
     return partial(torch.optim.SGD, lr=lr, momentum=momentum, weight_decay=weight_decay)
@@ -134,16 +154,41 @@ class ClassificationTrainer:
         epochs: int,
         on_step: StepCallback | None = None,
         on_epoch: EpochCallback | None = None,
+        start_step: int = 0,
     ) -> list[EpochResult]:
+        """Train for ``epochs`` epochs, or for what remains of them after ``start_step``.
+
+        With ``start_step=k`` the first ``k`` optimiser steps are skipped and the
+        scheduler is advanced past the epochs they cover, so training picks the schedule
+        up at step ``k``. Step numbers passed to ``on_step`` carry on from ``k``.
+        """
+        steps_per_epoch = len(self.train_loader)
+        if not 0 <= start_step < epochs * steps_per_epoch:
+            raise ValueError(
+                f"start_step={start_step} is outside the {epochs * steps_per_epoch} steps "
+                f"of {epochs} epochs"
+            )
+        start_epoch, skip = divmod(start_step, steps_per_epoch)
         model.to(self.device)
         optimiser = self.optimiser(p for p in model.parameters() if p.requires_grad)
         scheduler = self.scheduler(optimiser, epochs) if self.scheduler else None
+        if scheduler is not None and start_epoch:
+            with warnings.catch_warnings():
+                # Stepping before any optimiser step is the point here.
+                warnings.filterwarnings(
+                    "ignore", "Detected call of `lr_scheduler.step", UserWarning
+                )
+                for _ in range(start_epoch):
+                    scheduler.step()
         results: list[EpochResult] = []
-        step = 0
-        for epoch in range(epochs):
+        step = start_step
+        for epoch in range(start_epoch, epochs):
             model.train()
             acc = _Accumulator()
-            for inputs, targets in self.train_loader:
+            batches = iter(self.train_loader)
+            if epoch == start_epoch:
+                batches = itertools.islice(batches, skip, None)
+            for inputs, targets in batches:
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 optimiser.zero_grad(set_to_none=True)
                 with self._autocast():
