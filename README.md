@@ -273,15 +273,24 @@ uv run --group cpu --extra vision --extra qat python examples/mnist_qat.py
 Add `--fake-data --limit 120` to any of them for a quick run on random images, without
 downloading a dataset.
 
-A short MNIST run (10k training images, 2 epochs a round) reproduces the paper's
-qualitative result: rewound tickets hold or improve accuracy as they get sparser, while
-randomly re-initialised ones degrade.
+A short MNIST run reproduces the paper's qualitative result: rewound tickets hold or
+improve accuracy as they get sparser, while randomly re-initialised ones degrade. Final
+accuracy of each round, as mean ± standard deviation over seeds 0-2:
 
-| density | rewind to init | random re-init |
-|--------:|---------------:|---------------:|
-| 100%    | 0.917          | 0.918          |
-| 51%     | 0.931          | 0.900          |
-| 26%     | 0.931          | 0.888          |
+| density | rewind: val | rewind: test | random re-init: val | random re-init: test |
+|--------:|------------:|-------------:|--------------------:|---------------------:|
+| 100%    | 0.943 ± 0.001 | 0.922 ± 0.001 | 0.943 ± 0.001 | 0.922 ± 0.001 |
+| 64%     | 0.948 ± 0.001 | 0.926 ± 0.001 | 0.942 ± 0.004 | 0.914 ± 0.001 |
+| 41%     | 0.954 ± 0.002 | 0.927 ± 0.003 | 0.934 ± 0.003 | 0.900 ± 0.004 |
+| 26%     | 0.955 ± 0.002 | 0.928 ± 0.003 | 0.928 ± 0.002 | 0.892 ± 0.004 |
+
+Choosing by validation accuracy, `best()` picks the sparsest round (26%) for the rewound
+tickets in every seed, and stops at 41-64% for the random re-initialisations. To reproduce
+(10k training images, 2 epochs a round, 6 rounds), with `--rewind random` for the control:
+
+```shell
+uv run --group cpu --extra vision python examples/mnist_lenet.py --limit 10000 --epochs 2 --rounds 6 --seed 0
+```
 
 ## Development
 
