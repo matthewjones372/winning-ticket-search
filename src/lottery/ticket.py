@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import logging
 import math
@@ -16,6 +17,7 @@ import torch
 from torch import nn
 
 from lottery.checkpoint import (
+    Checkpoint,
     MetricsRecord,
     RoundRecord,
     SearchConfig,
@@ -84,6 +86,45 @@ class RoundResult:
     def final_val(self) -> Metrics | None:
         return self.epochs[-1].val if self.epochs else None
 
+    def to_record(self) -> RoundRecord:
+        """This round as plain data, the form checkpoints store it in."""
+        return {
+            "round": self.round,
+            "density": self.density,
+            "epochs": [
+                {
+                    "epoch": e.epoch,
+                    "train": _metrics_record(e.train),
+                    "test": _metrics_record(e.test),
+                    "val": None if e.val is None else _metrics_record(e.val),
+                }
+                for e in self.epochs
+            ],
+            "layers": [
+                {"name": layer.name, "remaining": layer.remaining, "total": layer.total}
+                for layer in self.layers
+            ],
+            "extra_metrics": {k: _metrics_record(m) for k, m in self.extra_metrics.items()},
+        }
+
+    @classmethod
+    def from_record(cls, data: RoundRecord) -> RoundResult:
+        return cls(
+            round=int(data["round"]),
+            density=float(data["density"]),
+            epochs=[
+                EpochResult(
+                    epoch=int(e["epoch"]),
+                    train=_metrics(e["train"]),
+                    test=_metrics(e["test"]),
+                    val=None if (val := e.get("val")) is None else _metrics(val),
+                )
+                for e in data["epochs"]
+            ],
+            layers=[LayerSparsity(**layer) for layer in data["layers"]],
+            extra_metrics={k: _metrics(v) for k, v in data["extra_metrics"].items()},
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
@@ -105,6 +146,8 @@ class SearchResult:
         """
         if not self.rounds:
             raise ValueError("no rounds recorded")
+        if tolerance < 0:
+            raise ValueError(f"tolerance must be >= 0, got {tolerance}")
         dense = next((r for r in self.rounds if r.round == 0), None)
         if dense is None:
             raise ValueError("the dense round (round 0) is not in this result")
@@ -286,7 +329,7 @@ class WinningTicket:
             model=self.model,
             rewind_state=self._rewind_state,
             rounds_completed=self.rounds_completed,
-            history=[_round_to_dict(r) for r in self.history],
+            history=[r.to_record() for r in self.history],
             config=self._config(),
         )
 
@@ -298,9 +341,25 @@ class WinningTicket:
         """
         if map_location is None:
             map_location = next(self.model.parameters()).device
-        checkpoint = load_checkpoint(
-            path, self.model, parameters=lambda _: self.parameters, map_location=map_location
-        )
+        before = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
+        try:
+            checkpoint = load_checkpoint(
+                path, self.model, parameters=lambda _: self.parameters, map_location=map_location
+            )
+            self._check_resumable(checkpoint)
+        except Exception:
+            self.model.load_state_dict(before)  # a rejected checkpoint changes nothing
+            raise
+        self._rewind_state = checkpoint.rewind_state
+        self.rounds_completed = checkpoint.rounds_completed
+        self.history = [RoundResult.from_record(r) for r in checkpoint.history]
+        # So the rounds after a resume draw the same random numbers as an uninterrupted
+        # run would (random re-init, shuffling, dropout).
+        if checkpoint.rng_state is not None:
+            torch.set_rng_state(checkpoint.rng_state.cpu())
+        _restore_cuda_rng(checkpoint.cuda_rng_state)
+
+    def _check_resumable(self, checkpoint: Checkpoint) -> None:
         late_snapshot_pending = self.rewind_step > 0 and checkpoint.rounds_completed == 0
         if (
             self.rewind is Rewind.WEIGHTS
@@ -317,14 +376,6 @@ class WinningTicket:
             )
         if checkpoint.config is not None:
             self._check_config(checkpoint.config)
-        self._rewind_state = checkpoint.rewind_state
-        self.rounds_completed = checkpoint.rounds_completed
-        self.history = [_round_from_dict(r) for r in checkpoint.history]
-        # So the rounds after a resume draw the same random numbers as an uninterrupted
-        # run would (random re-init, shuffling, dropout).
-        if checkpoint.rng_state is not None:
-            torch.set_rng_state(checkpoint.rng_state.cpu())
-        _restore_cuda_rng(checkpoint.cuda_rng_state)
 
     def __call__(self, inputs: torch.Tensor) -> torch.Tensor:
         output: torch.Tensor = self.model(inputs)
@@ -345,7 +396,7 @@ class WinningTicket:
         return {
             "rewind": str(self.rewind),
             "rewind_step": self.rewind_step,
-            "strategy": type(self.strategy).__qualname__,
+            "strategy": _strategy_name(self.strategy),
         }
 
     def _check_config(self, saved: SearchConfig) -> None:
@@ -356,7 +407,8 @@ class WinningTicket:
                 f"rewind_step={saved['rewind_step']}, but this ticket uses "
                 f"rewind='{mine['rewind']}', rewind_step={mine['rewind_step']}"
             )
-        if saved["strategy"] != mine["strategy"]:
+        # 2.2.0 recorded only the class name; accept that for the same class.
+        if saved["strategy"] not in (mine["strategy"], type(self.strategy).__qualname__):
             warnings.warn(
                 f"checkpoint was pruned with {saved['strategy']}, "
                 f"this ticket continues with {mine['strategy']}",
@@ -605,27 +657,6 @@ def _describe(result: RoundResult) -> str:
     return "  ".join(parts)
 
 
-def _round_to_dict(result: RoundResult) -> RoundRecord:
-    return {
-        "round": result.round,
-        "density": result.density,
-        "epochs": [
-            {
-                "epoch": e.epoch,
-                "train": _metrics_record(e.train),
-                "test": _metrics_record(e.test),
-                "val": None if e.val is None else _metrics_record(e.val),
-            }
-            for e in result.epochs
-        ],
-        "layers": [
-            {"name": layer.name, "remaining": layer.remaining, "total": layer.total}
-            for layer in result.layers
-        ],
-        "extra_metrics": {k: _metrics_record(m) for k, m in result.extra_metrics.items()},
-    }
-
-
 def _metrics_record(metrics: Metrics) -> MetricsRecord:
     return {"loss": metrics.loss, "accuracy": metrics.accuracy}
 
@@ -634,19 +665,41 @@ def _metrics(data: MetricsRecord) -> Metrics:
     return Metrics(loss=float(data["loss"]), accuracy=float(data["accuracy"]))
 
 
-def _round_from_dict(data: RoundRecord) -> RoundResult:
-    return RoundResult(
-        round=int(data["round"]),
-        density=float(data["density"]),
-        epochs=[
-            EpochResult(
-                epoch=int(e["epoch"]),
-                train=_metrics(e["train"]),
-                test=_metrics(e["test"]),
-                val=None if (val := e.get("val")) is None else _metrics(val),
-            )
-            for e in data["epochs"]
-        ],
-        layers=[LayerSparsity(**layer) for layer in data["layers"]],
-        extra_metrics={k: _metrics(v) for k, v in data["extra_metrics"].items()},
-    )
+def _strategy_name(strategy: PruningStrategy) -> str:
+    """Dataclass strategies by their repr, which includes their settings; others by class."""
+    if dataclasses.is_dataclass(strategy):
+        return repr(strategy)
+    return type(strategy).__qualname__
+
+
+def train_with_masks(
+    model: nn.Module,
+    masks: StateDict,
+    trainer: Trainer,
+    epochs: int,
+    parameters: ParameterSelector = default_prunable_parameters,
+) -> list[EpochResult]:
+    """Train ``model`` once under ``masks``, from whatever initialisation it has.
+
+    With a freshly built model and a winning ticket's masks (:meth:`WinningTicket.masks`
+    after the round you want), this is Frankle & Carbin's random re-initialisation
+    control: the same sparse structure, new random weights. ``rewind="random"`` is a
+    different experiment, which finds its own masks.
+    """
+    selected = list(parameters(model))
+    attach_masks(selected)
+    state = model.state_dict()
+    if set(masks) != mask_keys(model):
+        raise ValueError(
+            f"masks {sorted(masks)} do not match the model's prunable parameters "
+            f"{sorted(mask_keys(model))}"
+        )
+    with torch.no_grad():
+        for key, mask in masks.items():
+            if state[key].shape != mask.shape:
+                raise ValueError(
+                    f"mask {key!r} has shape {tuple(mask.shape)}, "
+                    f"the model's has {tuple(state[key].shape)}"
+                )
+            state[key].copy_(mask)
+    return trainer.fit(model, epochs)

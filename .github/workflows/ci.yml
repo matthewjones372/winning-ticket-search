@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Each job installs exactly what it needs with `uv sync`. Without this, `uv run` would
+  # re-sync to the default groups and swap the CPU torch for PyPI's CUDA build.
+  UV_NO_SYNC: "1"
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,6 +20,7 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -32,6 +38,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         python: ["3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -43,6 +50,7 @@ jobs:
 
   test-without-qat:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -53,6 +61,7 @@ jobs:
 
   examples:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
@@ -66,6 +75,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0

@@ -139,7 +139,7 @@ class ClassificationTrainer:
     loss_fn: nn.Module | Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
     train_loader: DataLoader[Any]
     test_loader: DataLoader[Any]
-    device: torch.device = field(default_factory=lambda: torch.device("cpu"))
+    device: torch.device | str = field(default_factory=lambda: torch.device("cpu"))
     optimiser: OptimiserFactory = field(default_factory=sgd)
     scheduler: SchedulerFactory | None = None
     autocast_dtype: torch.dtype | None = None
@@ -147,6 +147,9 @@ class ClassificationTrainer:
     val_loader: DataLoader[Any] | None = None
     """Evaluated every epoch alongside ``test_loader``. When set, ``SearchResult.best``
     picks rounds by validation accuracy, keeping the test set out of the selection."""
+
+    def __post_init__(self) -> None:
+        self.device = torch.device(self.device)
 
     def fit(
         self,
@@ -227,7 +230,7 @@ class ClassificationTrainer:
     def _evaluate(
         self, model: nn.Module, loader: DataLoader[Any], device: torch.device | None = None
     ) -> Metrics:
-        device = device or self.device
+        device = torch.device(device or self.device)
         model.to(device)
         model.eval()
         acc = _Accumulator()
@@ -242,4 +245,4 @@ class ClassificationTrainer:
     def _autocast(self, device: torch.device | None = None) -> torch.autocast | nullcontext[None]:
         if self.autocast_dtype is None:
             return nullcontext()
-        return torch.autocast((device or self.device).type, dtype=self.autocast_dtype)
+        return torch.autocast(torch.device(device or self.device).type, dtype=self.autocast_dtype)

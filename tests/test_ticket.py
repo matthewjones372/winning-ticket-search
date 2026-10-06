@@ -533,3 +533,35 @@ def test_trainer_without_start_step_warns_once_about_late_rewinding():
     with pytest.warns(UserWarning, match="start_step") as caught:
         ticket.search(rounds=2, epochs=1)
     assert len([w for w in caught if "start_step" in str(w.message)]) == 1
+
+
+def test_best_rejects_a_negative_tolerance():
+    with pytest.raises(ValueError, match="tolerance"):
+        SearchResult([_round(0, 1.0, 0.9)]).best(tolerance=-1)
+
+
+def test_train_with_masks_trains_a_fresh_init_under_a_tickets_masks():
+    """Frankle & Carbin's control: the winning ticket's masks, a new random init."""
+    from lottery import train_with_masks
+    from lottery.pruning import overall_density, sparsity_report
+
+    ticket = WinningTicket(TinyNet(), ShiftTrainer(delta=0.0))
+    ticket.search(rounds=2, epochs=1, prune_fraction=0.5)
+    masks = ticket.masks()
+
+    fresh = TinyNet()
+    results = train_with_masks(fresh, masks, ShiftTrainer(delta=1.0), epochs=2)
+
+    assert len(results) == 2
+    for key, mask in masks.items():
+        assert torch.equal(fresh.state_dict()[key], mask), key
+    params = [(fresh.fc1, "weight"), (fresh.fc2, "weight")]
+    assert overall_density(sparsity_report(fresh, params)) == pytest.approx(ticket.density())
+
+
+def test_train_with_masks_rejects_masks_for_another_model():
+    from lottery import train_with_masks
+
+    masks = WinningTicket(TinyNet(), ShiftTrainer()).masks()
+    with pytest.raises(ValueError, match="mask"):
+        train_with_masks(nn.Sequential(nn.Linear(8, 3)), masks, ShiftTrainer(), epochs=1)

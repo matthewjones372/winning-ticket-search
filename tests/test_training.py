@@ -186,3 +186,15 @@ def test_start_step_resumes_the_schedule_part_way(tiny_net, classification_data)
 def test_start_step_past_the_end_is_rejected(tiny_net, trainer):
     with pytest.raises(ValueError, match="start_step"):
         trainer.fit(tiny_net, epochs=2, start_step=6)
+
+
+def test_device_can_be_given_as_a_string(tiny_net, classification_data):
+    trainer = ClassificationTrainer(
+        nn.CrossEntropyLoss(),
+        classification_data,
+        classification_data,
+        device="cpu",
+        autocast_dtype=torch.bfloat16,
+    )
+    assert trainer.device == torch.device("cpu")
+    assert len(trainer.fit(tiny_net, epochs=1)) == 1
