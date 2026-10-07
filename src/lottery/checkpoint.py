@@ -70,6 +70,8 @@ class Checkpoint:
     cuda_rng_state: list[torch.Tensor] | None = None
     """``torch.cuda.get_rng_state_all()`` at save time, one per GPU; ``None`` if saved
     without CUDA."""
+    trainer_state: dict[str, torch.Tensor] | None = None
+    """The trainer's own random state (see ``StatefulTrainer``), if it has any."""
 
 
 def save_checkpoint(
@@ -80,6 +82,7 @@ def save_checkpoint(
     rounds_completed: int,
     history: list[RoundRecord] | None = None,
     config: SearchConfig | None = None,
+    trainer_state: dict[str, torch.Tensor] | None = None,
 ) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -93,6 +96,7 @@ def save_checkpoint(
             "config": config,
             "rng_state": torch.get_rng_state(),
             "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+            "trainer_state": trainer_state,
         },
         path,
     )
@@ -120,4 +124,5 @@ def load_checkpoint(
         config=payload.get("config"),
         rng_state=payload.get("rng_state"),
         cuda_rng_state=payload.get("cuda_rng_state"),
+        trainer_state=payload.get("trainer_state"),
     )

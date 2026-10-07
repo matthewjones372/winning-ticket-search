@@ -2,8 +2,11 @@ import csv
 
 import pytest
 import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 
 from lottery import (
+    ClassificationTrainer,
     CsvLogger,
     GlobalMagnitudePruning,
     LayerwiseMagnitudePruning,
@@ -234,3 +237,40 @@ def test_resuming_with_different_strategy_settings_warns(tmp_path):
     resumed = WinningTicket(TinyNet(), ShiftTrainer(), strategy=LayerwiseMagnitudePruning())
     with pytest.warns(UserWarning, match="output_layer_scale=0.5"):
         resumed.load(path)
+
+
+def _seeded_loader_trainer() -> ClassificationTrainer:
+    data = TensorDataset(
+        torch.randn(96, 8, generator=torch.Generator().manual_seed(0)),
+        torch.randint(0, 3, (96,), generator=torch.Generator().manual_seed(1)),
+    )
+    shuffled = DataLoader(
+        data, batch_size=16, shuffle=True, generator=torch.Generator().manual_seed(123)
+    )
+    return ClassificationTrainer(nn.CrossEntropyLoss(), shuffled, DataLoader(data, batch_size=96))
+
+
+def _net() -> nn.Module:
+    torch.manual_seed(0)
+    return nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 3))
+
+
+def test_resume_restores_a_loaders_own_generator(tmp_path):
+    """A DataLoader seeded with generator= shuffles from its own RNG, not the global one."""
+    original = WinningTicket(_net(), _seeded_loader_trainer())
+    original.search(rounds=1, epochs=2)
+    path = original.save(tmp_path / "t.pt")
+    original.search(rounds=1, epochs=2)
+
+    resumed = WinningTicket(_net(), _seeded_loader_trainer())
+    resumed.load(path)
+    resumed.search(rounds=1, epochs=2)
+    for key, value in original.model.state_dict().items():
+        assert torch.equal(resumed.model.state_dict()[key], value), key
+
+
+def test_trainers_without_state_still_checkpoint(tmp_path):
+    ticket = WinningTicket(TinyNet(), ShiftTrainer())
+    path = ticket.save(tmp_path / "t.pt")
+    assert torch.load(path, weights_only=True)["trainer_state"] is None
+    WinningTicket(TinyNet(), ShiftTrainer()).load(path)
