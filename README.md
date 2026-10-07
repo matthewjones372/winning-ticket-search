@@ -5,7 +5,10 @@
 Iterative magnitude pruning (IMP) in PyTorch for finding lottery tickets, as described by
 Frankle & Carbin in [The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks](https://arxiv.org/abs/1803.03635).
 Originally written for my MSc in Machine Learning; the report, *Enabling Deep Learning at the Edge*,
-is in [`report-public/report.pdf`](report-public/report.pdf).
+is in [`report-public/report.pdf`](report-public/report.pdf). Its experiments were run in 2021 on
+1.x, which re-initialised the surviving weights instead of rewinding them (see
+[Upgrading from 1.x](#upgrading-from-1x)), so its pruning results are closer to the random re-init
+control than to winning tickets. The [results below](#examples) are from the current code.
 
 It supports:
 
