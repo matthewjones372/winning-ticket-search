@@ -127,6 +127,8 @@ paper's defaults.
 ```python
 from functools import partial
 
+import torch
+
 ClassificationTrainer(
     loss_fn, train_loader, test_loader, optimiser=partial(torch.optim.AdamW, lr=3e-4)
 )
@@ -294,7 +296,7 @@ class MyTracker(Callback):
 ticket = WinningTicket(model, trainer, checkpoint_dir="results/run/checkpoints", checkpoint_every=5)
 ticket.save("ticket.pt")
 
-resumed = WinningTicket(Model(), trainer)
+resumed = WinningTicket(MyModel(), trainer)
 resumed.load("ticket.pt")
 resumed.search(rounds=5, epochs=5)  # carries on pruning
 ```
