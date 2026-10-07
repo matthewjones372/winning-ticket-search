@@ -41,6 +41,7 @@ from lottery.training import (
     EpochResult,
     Metrics,
     ResumableTrainer,
+    StatefulTrainer,
     StepCallback,
     Trainer,
 )
@@ -331,6 +332,7 @@ class WinningTicket:
             rounds_completed=self.rounds_completed,
             history=[r.to_record() for r in self.history],
             config=self._config(),
+            trainer_state=self.trainer.state_dict() if _is_stateful(self.trainer) else None,
         )
 
     def load(self, path: str | Path, map_location: torch.device | str | None = None) -> None:
@@ -358,6 +360,8 @@ class WinningTicket:
         if checkpoint.rng_state is not None:
             torch.set_rng_state(checkpoint.rng_state.cpu())
         _restore_cuda_rng(checkpoint.cuda_rng_state)
+        if checkpoint.trainer_state is not None and _is_stateful(self.trainer):
+            self.trainer.load_state_dict(checkpoint.trainer_state)
 
     def _check_resumable(self, checkpoint: Checkpoint) -> None:
         late_snapshot_pending = self.rewind_step > 0 and checkpoint.rounds_completed == 0
@@ -636,6 +640,12 @@ def _fit_accepts(trainer: Trainer, *names: str) -> bool:
     if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
         return True
     return all(name in parameters for name in names)
+
+
+def _is_stateful(trainer: Trainer) -> TypeGuard[StatefulTrainer]:
+    return callable(getattr(trainer, "state_dict", None)) and callable(
+        getattr(trainer, "load_state_dict", None)
+    )
 
 
 def _reports_epochs(trainer: Trainer) -> TypeGuard[EpochReportingTrainer]:

@@ -70,7 +70,13 @@ from lottery import GlobalMagnitudePruning, LayerwiseMagnitudePruning
 WinningTicket(model, trainer, strategy=GlobalMagnitudePruning())  # default
 # The paper prunes the output layer of its FC nets at half rate:
 WinningTicket(model, trainer, strategy=LayerwiseMagnitudePruning(output_layer_scale=0.5))
+# and, in its Conv-2/4 nets, conv layers at 10% a round, dense 20%, output 10%:
+strategy = LayerwiseMagnitudePruning(scales={nn.Conv2d: 0.5}, output_layer_scale=0.5)
+WinningTicket(model, trainer, strategy=strategy).search(rounds=10, epochs=5, prune_fraction=0.2)
 ```
+
+`scales` multiplies the round's `prune_fraction` per layer type (subclasses included,
+first match wins); the output layer uses `output_layer_scale` instead.
 
 The output layer is the last one selected for pruning, which with the default selector is
 the last one *defined*. If your model defines its head first, name it:
@@ -120,6 +126,8 @@ paper's defaults.
 
 ```python
 from functools import partial
+
+import torch
 
 ClassificationTrainer(
     loss_fn, train_loader, test_loader, optimiser=partial(torch.optim.AdamW, lr=3e-4)
@@ -288,7 +296,7 @@ class MyTracker(Callback):
 ticket = WinningTicket(model, trainer, checkpoint_dir="results/run/checkpoints", checkpoint_every=5)
 ticket.save("ticket.pt")
 
-resumed = WinningTicket(Model(), trainer)
+resumed = WinningTicket(MyModel(), trainer)
 resumed.load("ticket.pt")
 resumed.search(rounds=5, epochs=5)  # carries on pruning
 ```

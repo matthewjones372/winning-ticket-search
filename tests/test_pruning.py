@@ -270,3 +270,37 @@ def test_the_torch_internals_mask_detection_reads():
     assert not is_masked(layer, "bias")
     assert masked_parameters(layer) == [(layer, "weight")]
     assert prune.is_pruned(layer)
+
+
+def test_layerwise_scales_by_layer_type():
+    """Frankle & Carbin's Conv nets: conv layers at half the rate of the dense ones."""
+    model = nn.Sequential(
+        nn.Conv2d(1, 10, 3, bias=False),  # 90 weights
+        nn.Flatten(),
+        nn.Linear(10 * 2 * 2, 25, bias=False),  # 1000 weights
+        nn.Linear(25, 4, bias=False),  # 100 weights: the output layer
+    )
+    params = default_prunable_parameters(model)
+    strategy = LayerwiseMagnitudePruning(scales={nn.Conv2d: 0.5}, output_layer_scale=0.5)
+
+    strategy.prune(params, 0.4)
+
+    assert [int(get_mask(m, n).sum()) for m, n in params] == [72, 600, 80]
+
+
+def test_layerwise_scales_match_subclasses():
+    class MyLinear(nn.Linear):
+        pass
+
+    model = nn.Sequential(MyLinear(10, 10, bias=False), nn.Linear(10, 10, bias=False))
+    params = default_prunable_parameters(model)
+    LayerwiseMagnitudePruning(scales={nn.Linear: 0.0}, output_layer_scale=0.5).prune(params, 0.4)
+    assert [int(get_mask(m, n).sum()) for m, n in params] == [100, 80]
+
+
+@pytest.mark.parametrize("scale", [-0.1, 1.5])
+def test_layerwise_scales_must_be_fractions(scale):
+    with pytest.raises(ValueError, match="scales"):
+        LayerwiseMagnitudePruning(scales={nn.Linear: scale}).prune(
+            default_prunable_parameters(_two_layers()), 0.4
+        )

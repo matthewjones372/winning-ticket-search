@@ -7,7 +7,7 @@ gradient automatically, so there is no need to patch gradients during training.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -142,15 +142,23 @@ class LayerwiseMagnitudePruning:
     (``output_layer_scale=0.5``). The output layer is ``output_layer`` if given, otherwise
     the last selected parameter -- the last one *defined*, with the default selector, which
     is not the output layer for a model that defines its head before its body.
+
+    ``scales`` multiplies the fraction for other layers by their type, matching subclasses
+    and taking the first entry that matches. Frankle & Carbin's Conv-2/4 networks prune
+    conv layers at half the rate of the dense ones, and the output layer at half again:
+    ``scales={nn.Conv2d: 0.5}, output_layer_scale=0.5`` with ``prune_fraction=0.2``.
     """
 
     output_layer_scale: float = 1.0
     output_layer: nn.Module | None = field(default=None, repr=False)
+    scales: Mapping[type[nn.Module], float] = field(default_factory=dict)
 
     def prune(self, parameters: Sequence[PrunableParameter], fraction: float) -> None:
         _check_fraction(fraction)
         if not 0.0 <= self.output_layer_scale <= 1.0:
             raise ValueError("output_layer_scale must be in [0, 1]")
+        if not all(0.0 <= scale <= 1.0 for scale in self.scales.values()):
+            raise ValueError(f"scales must be in [0, 1], got {dict(self.scales)}")
         if self.output_layer is None:
             is_output = [i == len(parameters) - 1 for i in range(len(parameters))]
         else:
@@ -158,11 +166,15 @@ class LayerwiseMagnitudePruning:
             if not any(is_output):
                 raise ValueError("output_layer is not among the parameters being pruned")
         for (module, name), output in zip(parameters, is_output, strict=True):
-            amount = fraction * self.output_layer_scale if output else fraction
+            scale = self.output_layer_scale if output else self._scale_for(module)
+            amount = fraction * scale
             if amount > 0:
                 prune.l1_unstructured(
                     module, name, amount=amount, importance_scores=_live_weights(module, name)
                 )
+
+    def _scale_for(self, module: nn.Module) -> float:
+        return next((s for kind, s in self.scales.items() if isinstance(module, kind)), 1.0)
 
 
 def _live_weights(module: nn.Module, name: str) -> torch.Tensor:

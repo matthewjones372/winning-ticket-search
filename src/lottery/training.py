@@ -75,6 +75,16 @@ class EpochReportingTrainer(Trainer, Protocol):
     ) -> list[EpochResult]: ...
 
 
+class StatefulTrainer(Trainer, Protocol):
+    """A trainer with random state of its own, such as a ``DataLoader`` seeded through
+    ``generator=``, which checkpoints save and restore so a resumed search shuffles the
+    same way as an uninterrupted one."""
+
+    def state_dict(self) -> dict[str, torch.Tensor]: ...
+
+    def load_state_dict(self, state: dict[str, torch.Tensor]) -> None: ...
+
+
 class ResumableTrainer(EpochReportingTrainer, Protocol):
     """A trainer that can also start part-way through its schedule.
 
@@ -150,6 +160,31 @@ class ClassificationTrainer:
 
     def __post_init__(self) -> None:
         self.device = torch.device(self.device)
+
+    def state_dict(self) -> dict[str, torch.Tensor]:
+        """The states of the loaders' own random generators (see :class:`StatefulTrainer`)."""
+        return {name: g.get_state() for name, g in self._generators().items()}
+
+    def load_state_dict(self, state: dict[str, torch.Tensor]) -> None:
+        generators = self._generators()
+        for name, value in state.items():
+            if name in generators:
+                generators[name].set_state(value.cpu())
+
+    def _generators(self) -> dict[str, torch.Generator]:
+        """Each loader's generator, and its sampler's when that is a different one."""
+        found: dict[str, torch.Generator] = {}
+        loaders = {"train": self.train_loader, "test": self.test_loader, "val": self.val_loader}
+        for name, loader in loaders.items():
+            if loader is None:
+                continue
+            seen: set[int] = set()
+            for part, owner in (("generator", loader), ("sampler.generator", loader.sampler)):
+                generator = getattr(owner, "generator", None)
+                if isinstance(generator, torch.Generator) and id(generator) not in seen:
+                    seen.add(id(generator))
+                    found[f"{name}.{part}"] = generator
+        return found
 
     def fit(
         self,
