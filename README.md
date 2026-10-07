@@ -21,11 +21,11 @@ It supports:
 The package is not on PyPI; install it from GitHub, pinned to a release:
 
 ```shell
-uv add "lottery @ git+https://github.com/matthewjones372/winning-ticket-search@2.3.0"
-uv add "lottery[qat] @ git+https://github.com/matthewjones372/winning-ticket-search@2.3.0"  # with quantisation-aware training via torchao
+uv add "lottery @ git+https://github.com/matthewjones372/winning-ticket-search@2.4.0"
+uv add "lottery[qat] @ git+https://github.com/matthewjones372/winning-ticket-search@2.4.0"  # with quantisation-aware training via torchao
 ```
 
-Bring your own PyTorch build; with pip, `pip install "lottery @ git+https://github.com/matthewjones372/winning-ticket-search@2.3.0"`.
+Bring your own PyTorch build; with pip, `pip install "lottery @ git+https://github.com/matthewjones372/winning-ticket-search@2.4.0"`.
 
 ## Quick start
 

@@ -1,6 +1,6 @@
 [project]
 name = "lottery"
-version = "2.3.0"
+version = "2.4.0"
 description = "Iterative magnitude pruning search for lottery tickets (Frankle & Carbin, 2019) in PyTorch"
 readme = "README.md"
 license = "MIT"
