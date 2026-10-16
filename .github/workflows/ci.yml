@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-mattjones372
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -67,7 +67,7 @@ jobs:
       - run: uv run --isolated --resolution lowest-direct --group cpu --extra qat pytest -q
 
   test-without-qat:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-mattjones372
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -78,7 +78,7 @@ jobs:
       - run: uv run pytest -q
 
   examples:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-mattjones372
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -92,7 +92,7 @@ jobs:
       - run: uv run python examples/cifar10_conv.py --fake-data --limit 120 --rounds 1 --epochs 1 --rewind-step 1
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-mattjones372
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
