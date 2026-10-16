@@ -10,7 +10,7 @@ on:
 
 jobs:
   analyze:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-mattjones372
     permissions:
       actions: read
       contents: read
