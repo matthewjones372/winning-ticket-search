@@ -41,7 +41,7 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "ruff>=0.13",
-    "ty==0.0.84",
+    "ty==0.0.85",
     "types-tqdm>=4.70.0.20260906",
 ]
 # Which PyTorch build uv installs, for working in this repo. These are groups, not extras,
