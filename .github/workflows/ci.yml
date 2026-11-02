@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       - run: uv sync --locked --group cpu --extra qat --extra vision
@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
           python-version: ${{ matrix.python }}
@@ -60,7 +60,7 @@ jobs:
       UV_NO_SYNC: "false" # this job resolves its own environment in `uv run`
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       - run: uv run --isolated --resolution lowest-direct --group cpu --extra qat python -c "import lottery.qat"
@@ -71,7 +71,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       - run: uv sync --locked --group cpu
@@ -82,7 +82,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       - run: uv sync --locked --group cpu --extra qat --extra vision
@@ -96,7 +96,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
       - run: uv build
       - name: Install the wheel into a clean environment and import it
         run: |
